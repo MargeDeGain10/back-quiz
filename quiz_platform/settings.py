@@ -43,6 +43,9 @@ INSTALLED_APPS = [
     'django_filters',
     'djoser',
     'rest_framework_simplejwt',
+    'users',
+    'quizzes',
+    'responses',
 ]
 
 MIDDLEWARE = [
