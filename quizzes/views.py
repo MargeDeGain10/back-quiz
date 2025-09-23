@@ -8,7 +8,7 @@ from django.utils import timezone
 from users.permissions import IsAdmin, IsAdminOrStagiaire
 from .models import Questionnaire, Question, Reponse
 from .serializers import (
-    QuestionneListSerializer, QuestionnaireDetailSerializer,
+    QuestionnaireListSerializer, QuestionnaireDetailSerializer,
     QuestionnaireCreateUpdateSerializer, QuestionnaireStatsSerializer,
     QuestionDetailSerializer, QuestionCreateUpdateSerializer
 )
@@ -36,7 +36,7 @@ class QuestionnaireViewSet(viewsets.ModelViewSet):
         Retourner le serializer approprié selon l'action
         """
         if self.action == 'list':
-            return QuestionneListSerializer
+            return QuestionnaireListSerializer
         elif self.action in ['create', 'update', 'partial_update']:
             return QuestionnaireCreateUpdateSerializer
         elif self.action == 'statistiques':
