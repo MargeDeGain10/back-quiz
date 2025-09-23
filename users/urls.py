@@ -1,6 +1,11 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
+
+# Router pour les ViewSets
+router = DefaultRouter()
+router.register(r'stagiaires', views.StagiaireViewSet, basename='stagiaire')
 
 urlpatterns = [
     # Authentification JWT
@@ -18,4 +23,7 @@ urlpatterns = [
 
     # Création d'utilisateurs (admin seulement)
     path('create/', views.UserCreateView.as_view(), name='user_create'),
+
+    # API Stagiaires (Admin uniquement)
+    path('', include(router.urls)),
 ]
