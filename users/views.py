@@ -15,11 +15,17 @@ from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from rest_framework import viewsets
+from rest_framework.decorators import action
+
 from .serializers import (
     LoginSerializer, UserProfileSerializer, ChangePasswordSerializer,
-    PasswordResetSerializer, UserCreateSerializer
+    PasswordResetSerializer, UserCreateSerializer, StagiaireCreateSerializer,
+    StagiaireUpdateSerializer, StagiaireDetailSerializer
 )
 from .permissions import IsAdmin, IsAdminOrStagiaire
+from .filters import StagiaireFilter
+from .models import Stagiaire
 
 User = get_user_model()
 
@@ -178,6 +184,194 @@ class UserCreateView(APIView):
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class StagiaireViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pour la gestion CRUD des stagiaires par les administrateurs
+    """
+    permission_classes = [IsAdmin]
+    filterset_class = StagiaireFilter
+    search_fields = ['user__nom', 'user__prenom', 'user__email', 'user__login', 'societe']
+    ordering_fields = ['user__nom', 'user__prenom', 'user__date_joined', 'societe']
+    ordering = ['user__nom', 'user__prenom']
+
+    def get_queryset(self):
+        """
+        Retourner seulement les stagiaires
+        """
+        return Stagiaire.objects.select_related('user').filter(
+            user__role='STAGIAIRE'
+        )
+
+    def get_serializer_class(self):
+        """
+        Retourner le serializer approprié selon l'action
+        """
+        if self.action == 'create':
+            return StagiaireCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return StagiaireUpdateSerializer
+        else:
+            return StagiaireDetailSerializer
+
+    def create(self, request, *args, **kwargs):
+        """
+        Créer un nouveau stagiaire
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        stagiaire = serializer.save()
+
+        # Retourner la réponse avec le serializer de détail
+        response_serializer = StagiaireDetailSerializer(stagiaire)
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Suppression d'un stagiaire avec gestion des cascades
+        """
+        instance = self.get_object()
+        user = instance.user
+
+        # Vérifier s'il y a des parcours associés
+        parcours_count = instance.parcours.count()
+
+        if parcours_count > 0:
+            return Response({
+                'error': f'Impossible de supprimer ce stagiaire. Il a {parcours_count} parcours associé(s).',
+                'detail': 'Vous devez d\'abord supprimer ou réassigner les parcours.',
+                'parcours_count': parcours_count
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Supprimer le stagiaire et l'utilisateur
+        instance.delete()
+        user.delete()
+
+        return Response({
+            'message': 'Stagiaire supprimé avec succès'
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'])
+    def statistiques(self, request):
+        """
+        Statistiques générales des stagiaires
+        """
+        from django.db.models import Count, Avg, Q
+        from responses.models import Parcours
+
+        queryset = self.get_queryset()
+
+        # Statistiques de base
+        total_stagiaires = queryset.count()
+        stagiaires_actifs = queryset.filter(user__is_active=True).count()
+        stagiaires_inactifs = total_stagiaires - stagiaires_actifs
+
+        # Statistiques des parcours
+        parcours_stats = queryset.aggregate(
+            avec_parcours=Count('parcours', distinct=True),
+            parcours_termines=Count(
+                'parcours',
+                filter=Q(parcours__statut='TERMINE'),
+                distinct=True
+            ),
+            note_moyenne_globale=Avg(
+                'parcours__note_obtenue',
+                filter=Q(parcours__statut='TERMINE')
+            )
+        )
+
+        # Top sociétés
+        top_societes = queryset.values('societe').annotate(
+            count=Count('societe')
+        ).order_by('-count')[:10]
+
+        # Stagiaires récents (derniers 30 jours)
+        from datetime import datetime, timedelta
+        date_limite = datetime.now() - timedelta(days=30)
+        nouveaux_stagiaires = queryset.filter(
+            user__date_joined__gte=date_limite
+        ).count()
+
+        return Response({
+            'total_stagiaires': total_stagiaires,
+            'stagiaires_actifs': stagiaires_actifs,
+            'stagiaires_inactifs': stagiaires_inactifs,
+            'nouveaux_stagiaires_30j': nouveaux_stagiaires,
+            'parcours': {
+                'stagiaires_avec_parcours': parcours_stats['avec_parcours'],
+                'parcours_termines': parcours_stats['parcours_termines'],
+                'note_moyenne_globale': round(parcours_stats['note_moyenne_globale'], 2)
+                                      if parcours_stats['note_moyenne_globale'] else None
+            },
+            'top_societes': top_societes
+        })
+
+    @action(detail=True, methods=['post'])
+    def toggle_activation(self, request, pk=None):
+        """
+        Activer/désactiver un stagiaire
+        """
+        instance = self.get_object()
+        user = instance.user
+
+        user.is_active = not user.is_active
+        user.save()
+
+        return Response({
+            'message': f'Stagiaire {"activé" if user.is_active else "désactivé"} avec succès',
+            'is_active': user.is_active
+        })
+
+    @action(detail=True, methods=['get'])
+    def parcours(self, request, pk=None):
+        """
+        Récupérer les parcours d'un stagiaire spécifique
+        """
+        instance = self.get_object()
+        parcours = instance.parcours.all().order_by('-date_realisation')
+
+        # Pagination manuelle si nécessaire
+        page = self.paginate_queryset(parcours)
+        if page is not None:
+            # Serializer des parcours (à implémenter dans l'app responses)
+            serializer_data = []
+            for p in page:
+                serializer_data.append({
+                    'id': p.id,
+                    'questionnaire': {
+                        'id': p.questionnaire.id,
+                        'nom': p.questionnaire.nom
+                    },
+                    'date_realisation': p.date_realisation,
+                    'statut': p.statut,
+                    'note_obtenue': p.note_obtenue,
+                    'temps_passe_minutes': p.temps_passe_minutes,
+                    'progression_pourcentage': p.progression_pourcentage
+                })
+            return self.get_paginated_response(serializer_data)
+
+        serializer_data = []
+        for p in parcours:
+            serializer_data.append({
+                'id': p.id,
+                'questionnaire': {
+                    'id': p.questionnaire.id,
+                    'nom': p.questionnaire.nom
+                },
+                'date_realisation': p.date_realisation,
+                'statut': p.statut,
+                'note_obtenue': p.note_obtenue,
+                'temps_passe_minutes': p.temps_passe_minutes,
+                'progression_pourcentage': p.progression_pourcentage
+            })
+
+        return Response(serializer_data)
 
 
 @api_view(['GET'])

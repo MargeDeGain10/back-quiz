@@ -212,3 +212,325 @@ class UserCreateSerializer(serializers.ModelSerializer):
             )
 
         return user
+
+
+class StagiaireCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer pour la création de stagiaires avec validation stricte
+    """
+    # Champs utilisateur
+    nom = serializers.CharField(max_length=120, required=True)
+    prenom = serializers.CharField(max_length=120, required=True)
+    login = serializers.CharField(max_length=120, required=True)
+    email = serializers.EmailField(max_length=254, required=True)
+    password = serializers.CharField(write_only=True, required=True)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+
+    # Champ stagiaire
+    societe = serializers.CharField(max_length=180, required=True)
+
+    class Meta:
+        model = Stagiaire
+        fields = [
+            'nom', 'prenom', 'login', 'email', 'password',
+            'confirm_password', 'societe'
+        ]
+
+    def validate_nom(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Le nom ne peut pas être vide.')
+        return value.strip()
+
+    def validate_prenom(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Le prénom ne peut pas être vide.')
+        return value.strip()
+
+    def validate_login(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Le login ne peut pas être vide.')
+
+        login = value.strip().lower()
+
+        # Vérifier l'unicité du login
+        if User.objects.filter(login__iexact=login).exists():
+            raise serializers.ValidationError('Ce login existe déjà.')
+
+        return login
+
+    def validate_email(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('L\'email ne peut pas être vide.')
+
+        email = value.strip().lower()
+
+        # Vérifier l'unicité de l'email
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError('Cette adresse email existe déjà.')
+
+        return email
+
+    def validate_societe(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('La société ne peut pas être vide.')
+        return value.strip()
+
+    def validate(self, attrs):
+        password = attrs.get('password', '').strip()
+        confirm_password = attrs.get('confirm_password', '').strip()
+
+        # Vérification des mots de passe
+        if not password:
+            raise serializers.ValidationError({
+                'password': 'Le mot de passe ne peut pas être vide.'
+            })
+
+        if password != confirm_password:
+            raise serializers.ValidationError({
+                'confirm_password': 'Les mots de passe ne correspondent pas.'
+            })
+
+        # Validation de la force du mot de passe
+        try:
+            validate_password(password)
+        except ValidationError as e:
+            raise serializers.ValidationError({
+                'password': e.messages
+            })
+
+        # Vérifier l'unicité de la paire nom/login (après normalisation)
+        nom = attrs.get('nom', '').strip()
+        login = attrs.get('login', '').strip().lower()
+
+        if User.objects.filter(
+            nom__iexact=nom,
+            login__iexact=login
+        ).exists():
+            raise serializers.ValidationError(
+                'La combinaison nom/login existe déjà.'
+            )
+
+        return attrs
+
+    def create(self, validated_data):
+        # Retirer les champs non-User
+        societe = validated_data.pop('societe')
+        confirm_password = validated_data.pop('confirm_password')
+        password = validated_data.pop('password')
+
+        # Créer l'utilisateur
+        user_data = {
+            'nom': validated_data['nom'],
+            'prenom': validated_data['prenom'],
+            'login': validated_data['login'],
+            'email': validated_data['email'],
+            'role': 'STAGIAIRE'
+        }
+
+        user = User.objects.create_user(
+            password=password,
+            **user_data
+        )
+
+        # Créer le profil stagiaire
+        stagiaire = Stagiaire.objects.create(
+            user=user,
+            societe=societe
+        )
+
+        return stagiaire
+
+
+class StagiaireUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer pour la mise à jour de stagiaires
+    """
+    # Champs utilisateur
+    nom = serializers.CharField(max_length=120, required=False)
+    prenom = serializers.CharField(max_length=120, required=False)
+    login = serializers.CharField(max_length=120, required=False)
+    email = serializers.EmailField(max_length=254, required=False)
+    password = serializers.CharField(write_only=True, required=False)
+    confirm_password = serializers.CharField(write_only=True, required=False)
+    is_active = serializers.BooleanField(required=False)
+
+    # Champ stagiaire
+    societe = serializers.CharField(max_length=180, required=False)
+
+    class Meta:
+        model = Stagiaire
+        fields = [
+            'nom', 'prenom', 'login', 'email', 'password',
+            'confirm_password', 'societe', 'is_active'
+        ]
+
+    def validate_nom(self, value):
+        if value is not None and (not value or not value.strip()):
+            raise serializers.ValidationError('Le nom ne peut pas être vide.')
+        return value.strip() if value else value
+
+    def validate_prenom(self, value):
+        if value is not None and (not value or not value.strip()):
+            raise serializers.ValidationError('Le prénom ne peut pas être vide.')
+        return value.strip() if value else value
+
+    def validate_login(self, value):
+        if value is not None:
+            if not value or not value.strip():
+                raise serializers.ValidationError('Le login ne peut pas être vide.')
+
+            login = value.strip().lower()
+
+            # Vérifier l'unicité du login (exclure l'utilisateur actuel)
+            if User.objects.filter(login__iexact=login).exclude(
+                id=self.instance.user.id
+            ).exists():
+                raise serializers.ValidationError('Ce login existe déjà.')
+
+            return login
+        return value
+
+    def validate_email(self, value):
+        if value is not None:
+            if not value or not value.strip():
+                raise serializers.ValidationError('L\'email ne peut pas être vide.')
+
+            email = value.strip().lower()
+
+            # Vérifier l'unicité de l'email (exclure l'utilisateur actuel)
+            if User.objects.filter(email__iexact=email).exclude(
+                id=self.instance.user.id
+            ).exists():
+                raise serializers.ValidationError('Cette adresse email existe déjà.')
+
+            return email
+        return value
+
+    def validate_societe(self, value):
+        if value is not None and (not value or not value.strip()):
+            raise serializers.ValidationError('La société ne peut pas être vide.')
+        return value.strip() if value else value
+
+    def validate(self, attrs):
+        password = attrs.get('password')
+        confirm_password = attrs.get('confirm_password')
+
+        # Vérification des mots de passe si fournis
+        if password is not None or confirm_password is not None:
+            if password != confirm_password:
+                raise serializers.ValidationError({
+                    'confirm_password': 'Les mots de passe ne correspondent pas.'
+                })
+
+            if password and not password.strip():
+                raise serializers.ValidationError({
+                    'password': 'Le mot de passe ne peut pas être vide.'
+                })
+
+            # Validation de la force du mot de passe
+            if password:
+                try:
+                    validate_password(password.strip(), self.instance.user)
+                except ValidationError as e:
+                    raise serializers.ValidationError({
+                        'password': e.messages
+                    })
+
+        # Vérifier l'unicité de la paire nom/login si modifiés
+        nom = attrs.get('nom')
+        login = attrs.get('login')
+
+        if nom is not None or login is not None:
+            final_nom = nom if nom is not None else self.instance.user.nom
+            final_login = login if login is not None else self.instance.user.login
+
+            if User.objects.filter(
+                nom__iexact=final_nom,
+                login__iexact=final_login
+            ).exclude(id=self.instance.user.id).exists():
+                raise serializers.ValidationError(
+                    'La combinaison nom/login existe déjà.'
+                )
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        # Séparer les champs utilisateur et stagiaire
+        user_fields = ['nom', 'prenom', 'login', 'email', 'password', 'is_active']
+        stagiaire_fields = ['societe']
+
+        user_data = {}
+        stagiaire_data = {}
+
+        for field, value in validated_data.items():
+            if field in user_fields:
+                if field not in ['password', 'confirm_password']:
+                    user_data[field] = value
+            elif field in stagiaire_fields:
+                stagiaire_data[field] = value
+
+        # Retirer confirm_password
+        validated_data.pop('confirm_password', None)
+
+        # Mettre à jour l'utilisateur
+        user = instance.user
+        for field, value in user_data.items():
+            setattr(user, field, value)
+
+        # Mettre à jour le mot de passe si fourni
+        password = validated_data.get('password')
+        if password:
+            user.set_password(password.strip())
+
+        user.save()
+
+        # Mettre à jour le stagiaire
+        for field, value in stagiaire_data.items():
+            setattr(instance, field, value)
+
+        instance.save()
+
+        return instance
+
+
+class StagiaireDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer pour l'affichage détaillé d'un stagiaire
+    """
+    # Informations utilisateur
+    id = serializers.IntegerField(source='user.id', read_only=True)
+    nom = serializers.CharField(source='user.nom', read_only=True)
+    prenom = serializers.CharField(source='user.prenom', read_only=True)
+    login = serializers.CharField(source='user.login', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    is_active = serializers.BooleanField(source='user.is_active', read_only=True)
+    date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
+    last_login = serializers.DateTimeField(source='user.last_login', read_only=True)
+
+    # Statistiques des parcours
+    nombre_parcours = serializers.SerializerMethodField()
+    parcours_termines = serializers.SerializerMethodField()
+    note_moyenne = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Stagiaire
+        fields = [
+            'id', 'nom', 'prenom', 'login', 'email', 'societe',
+            'is_active', 'date_joined', 'last_login',
+            'nombre_parcours', 'parcours_termines', 'note_moyenne'
+        ]
+
+    def get_nombre_parcours(self, obj):
+        return obj.parcours.count()
+
+    def get_parcours_termines(self, obj):
+        return obj.parcours.filter(statut='TERMINE').count()
+
+    def get_note_moyenne(self, obj):
+        from django.db.models import Avg
+        avg_note = obj.parcours.filter(
+            statut='TERMINE',
+            note_obtenue__isnull=False
+        ).aggregate(avg=Avg('note_obtenue'))['avg']
+
+        return round(avg_note, 2) if avg_note else None
