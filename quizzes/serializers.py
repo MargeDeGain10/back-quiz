@@ -93,7 +93,18 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
             return instance
 
 
-class QuestionneListSerializer(serializers.ModelSerializer):
+class QuestionSerializer(serializers.ModelSerializer):
+    """
+    Serializer simple pour une question (pour les stagiaires)
+    """
+    reponses = ReponseSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Question
+        fields = ['id', 'intitule', 'reponses']
+
+
+class QuestionnaireListSerializer(serializers.ModelSerializer):
     """
     Serializer pour la liste des questionnaires
     """

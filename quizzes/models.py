@@ -21,6 +21,10 @@ class Questionnaire(models.Model):
     def nombre_questions(self):
         return self.questions.count()
 
+    @property
+    def duree(self):
+        return self.duree_minutes
+
 
 class Question(models.Model):
     questionnaire = models.ForeignKey(
