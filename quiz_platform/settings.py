@@ -87,22 +87,14 @@ WSGI_APPLICATION = 'quiz_platform.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME', default='quiz_platform_db'),
+        'USER': config('DB_USER', default='postgres'),
+        'PASSWORD': config('DB_PASSWORD', default=''),
+        'HOST': config('DB_HOST', default='localhost'),
+        'PORT': config('DB_PORT', default='5432'),
     }
 }
-
-# Configuration PostgreSQL pour la production
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('DB_NAME'),
-#         'USER': config('DB_USER'),
-#         'PASSWORD': config('DB_PASSWORD'),
-#         'HOST': config('DB_HOST'),
-#         'PORT': config('DB_PORT'),
-#     }
-# }
 
 
 # Password validation
@@ -217,6 +209,20 @@ CORS_ALLOW_CREDENTIALS = True
 
 # URL du frontend pour les liens de réinitialisation
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
+# DRF Spectacular Configuration pour Swagger
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Quiz Platform API',
+    'DESCRIPTION': 'API complète pour la plateforme de quiz avec gestion des utilisateurs, questionnaires et analyses',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api',
+    'SECURITY': [{'Bearer': []}],
+    'AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
 
 # Djoser Configuration
 # Custom User Model

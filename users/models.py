@@ -1,9 +1,9 @@
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.contrib.auth.models import AbstractBaseUser
 from django.db import models
 from .managers import UserManager
 
 
-class User(AbstractBaseUser, PermissionsMixin):
+class User(AbstractBaseUser):
     ROLE_CHOICES = [
         ('ADMIN', 'Administrateur'),
         ('STAGIAIRE', 'Stagiaire'),
@@ -16,7 +16,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
 
     is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()
@@ -39,6 +38,25 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_stagiaire(self):
         return self.role == 'STAGIAIRE'
+
+    # Propriétés pour la compatibilité avec Django admin
+    @property
+    def is_staff(self):
+        """Les admins peuvent accéder à l'admin Django"""
+        return self.role == 'ADMIN'
+
+    @property
+    def is_superuser(self):
+        """Les admins sont des superusers"""
+        return self.role == 'ADMIN'
+
+    def has_perm(self, _perm, _obj=None):
+        """Les admins ont toutes les permissions"""
+        return self.role == 'ADMIN'
+
+    def has_module_perms(self, _app_label):
+        """Les admins ont accès à tous les modules"""
+        return self.role == 'ADMIN'
 
 
 class Stagiaire(models.Model):

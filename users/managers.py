@@ -28,12 +28,7 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, login, nom, prenom, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError('Le superuser doit avoir is_staff=True.')
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError('Le superuser doit avoir is_superuser=True.')
-
+        """
+        Créer un superuser (admin) - Les champs is_staff et is_superuser sont gérés par les propriétés
+        """
         return self.create_user(email, login, nom, prenom, 'ADMIN', password, **extra_fields)

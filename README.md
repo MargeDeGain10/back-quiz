@@ -1,17 +1,17 @@
 # 🎯 Quiz Platform API
 
-Une plateforme complète de quiz et questionnaires avec API REST avancée, gestion des utilisateurs, scoring intelligent et analyses détaillées.
+Une plateforme complète de quiz et questionnaires avec API REST minimaliste, gestion des utilisateurs simplifiée et analyses détaillées.
 
 ## 🚀 Fonctionnalités
 
-### 👥 Gestion des utilisateurs
+### 👥 Gestion des utilisateurs simplifiée
 - **Authentification JWT** sécurisée avec refresh tokens
-- **Rôles utilisateurs** : Administrateurs et Stagiaires
-- **Profils personnalisés** avec informations de société
-- **Gestion des permissions** granulaire
+- **Système de rôles simplifié** : `ADMIN` et `STAGIAIRE` uniquement
+- **API organisée** par domaine fonctionnel
+- **Gestion des permissions** basée sur le rôle
 
 ### 📝 Système de questionnaires
-- **CRUD complet** pour les questionnaires et questions
+- **CRUD complet** pour les questionnaires et questions (Admin)
 - **Questions à choix unique ou multiples**
 - **Validation des contraintes métier**
 - **Gestion du temps** par questionnaire
@@ -31,7 +31,7 @@ Une plateforme complète de quiz et questionnaires avec API REST avancée, gesti
 ## 🛠️ Stack technique
 
 - **Backend** : Django 4.2.7 + Django REST Framework 3.14.0
-- **Base de données** : SQLite (dev) / PostgreSQL (prod)
+- **Base de données** : PostgreSQL
 - **Authentification** : JWT avec django-rest-framework-simplejwt
 - **Documentation API** : DRF Spectacular (OpenAPI 3.0)
 - **CORS** : django-cors-headers
@@ -72,35 +72,51 @@ Créer un fichier `.env` à la racine :
 SECRET_KEY=votre_cle_secrete_django_ici
 DEBUG=True
 
-# Base de données (optionnel pour dev)
-DB_NAME=quiz_platform
+# Configuration PostgreSQL
+DB_NAME=quiz_platform_db
 DB_USER=postgres
-DB_PASSWORD=motdepasse
+DB_PASSWORD=postgres
 DB_HOST=localhost
 DB_PORT=5432
 
-# Frontend
+# Frontend et CORS
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 FRONTEND_URL=http://localhost:3000
 
 # Email (optionnel)
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-EMAIL_HOST_USER=votre@email.com
-EMAIL_HOST_PASSWORD=motdepasse
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=votre-email@gmail.com
+EMAIL_HOST_PASSWORD=votre-app-password
 ```
 
-### 5. Migrations et données de démonstration
+### 5. Créer la base de données PostgreSQL
+```bash
+createdb quiz_platform_db
+```
+
+### 6. Migrations de base
 ```bash
 python manage.py migrate
-python manage.py create_demo_data
 ```
 
-### 6. Créer un superutilisateur
+### 7. Créer un administrateur
 ```bash
-python manage.py createsuperuser
+python manage.py shell
+>>> from users.models import User
+>>> admin = User.objects.create_superuser(
+...     login='admin',
+...     email='admin@example.com',
+...     password='admin123',
+...     nom='Administrateur',
+...     prenom='Principal'
+... )
+>>> exit()
 ```
 
-### 7. Lancer le serveur
+### 8. Lancer le serveur
 ```bash
 python manage.py runserver
 ```
@@ -121,38 +137,73 @@ L'API sera accessible sur `http://localhost:8000`
 
 ### Authentification
 ```bash
-# Inscription
-curl -X POST http://localhost:8000/api/users/register/ \
+# Connexion avec l'admin créé
+curl -X POST http://localhost:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "admin",
+    "password": "admin123"
+  }'
+
+# Créer un stagiaire (nécessite token admin)
+curl -X POST http://localhost:8000/api/stagiaires/ \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "stagiaire@test.com",
     "password": "motdepasse123",
+    "confirm_password": "motdepasse123",
     "nom": "Dupont",
     "prenom": "Jean",
     "login": "jdupont",
-    "role": "STAGIAIRE"
-  }'
-
-# Connexion
-curl -X POST http://localhost:8000/api/users/login/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "stagiaire@test.com",
-    "password": "motdepasse123"
+    "promotion": "2024",
+    "specialite": "Développement Web"
   }'
 ```
 
-### Accès aux questionnaires
+### Structure des endpoints
+La nouvelle API est organisée par domaine fonctionnel :
+
+#### 🔐 Authentification (`/api/auth/`)
+- `POST /api/auth/login/` - Connexion
+- `POST /api/auth/logout/` - Déconnexion
+- `POST /api/auth/token/refresh/` - Refresh token
+- `GET /api/auth/check-auth/` - Vérifier auth
+- `POST /api/auth/change-password/` - Changer mot de passe
+- `POST /api/auth/reset-password/` - Reset mot de passe
+
+#### 👤 Profil utilisateur (`/api/users/`)
+- `GET /api/users/me/` - Mon profil
+- `PUT /api/users/me/` - Modifier mon profil
+
+#### 👥 Gestion des stagiaires (`/api/stagiaires/`) - Admin uniquement
+- `GET /api/stagiaires/` - Lister stagiaires
+- `POST /api/stagiaires/` - Créer stagiaire
+- `GET /api/stagiaires/{id}/` - Détail stagiaire
+- `PUT /api/stagiaires/{id}/` - Modifier stagiaire
+- `DELETE /api/stagiaires/{id}/` - Supprimer stagiaire
+
+#### 🔑 Gestion des admins (`/api/admins/`) - Admin uniquement
+- `POST /api/admins/create/` - Créer administrateur
+
+#### 📚 Quiz (`/api/quizzes/` et `/api/responses/`)
+- Gestion des questionnaires, questions et réponses (inchangée)
+
+### Utilisation des endpoints
 ```bash
-# Liste des questionnaires
+# Accès aux questionnaires (Admin)
 curl -H "Authorization: Bearer <access_token>" \
   http://localhost:8000/api/quizzes/questionnaires/
 
-# Commencer un questionnaire
+# Démarrer un quiz (Stagiaire)
 curl -X POST http://localhost:8000/api/responses/parcours/ \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"questionnaire": 1}'
+  -d '{"questionnaire_id": 1}'
+
+# Voir son profil
+curl -H "Authorization: Bearer <access_token>" \
+  http://localhost:8000/api/users/me/
 ```
 
 ## 🏗️ Architecture du projet
@@ -190,10 +241,10 @@ quiz_platform/
 Voir le fichier `docs/ENVIRONMENT.md` pour la liste complète des variables disponibles.
 
 ### Base de données PostgreSQL
-Pour utiliser PostgreSQL en production, décommentez la configuration dans `settings.py` et configurez les variables d'environnement correspondantes.
+La plateforme est configurée pour utiliser PostgreSQL par défaut. Les variables d'environnement dans le fichier `.env` permettent de configurer la connexion.
 
 ### CORS pour frontend
-Les domaines autorisés sont configurés dans `CORS_ALLOWED_ORIGINS`. Ajoutez votre domaine frontend pour la production.
+Les domaines autorisés sont configurés dans `CORS_ALLOWED_ORIGINS`. Modifiez cette variable dans `.env` pour ajouter votre domaine frontend en production.
 
 ## 🧪 Tests
 
@@ -239,6 +290,22 @@ Voir `docs/FRONTEND.md` pour le guide complet d'intégration avec Vue.js, inclua
 ## 📄 License
 
 MIT License - voir le fichier LICENSE pour plus de détails.
+
+## 📄 Collection Postman
+
+Une collection Postman complète est disponible : `Quiz_Platform_Postman_Collection.json`
+
+Cette collection inclut :
+- Tous les endpoints avec exemples
+- Variables automatiques pour les tokens
+- Scripts de test pour l'extraction des données
+- Organisation par domaines fonctionnels
+
+### Importation
+1. Ouvrir Postman
+2. Importer le fichier `Quiz_Platform_Postman_Collection.json`
+3. Configurer les variables d'environnement si nécessaire
+4. Tester les endpoints en commençant par l'authentification
 
 ---
 

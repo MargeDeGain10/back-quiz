@@ -21,11 +21,23 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # API endpoints
-    path('api/auth/', include('djoser.urls')),
-    path('api/auth/', include('djoser.urls.jwt')),
+    # API endpoints - Version minimaliste
+    # Authentication endpoints
+    path('api/auth/', include('users.auth_urls')),
+
+    # User profile endpoints
     path('api/users/', include('users.urls')),
+
+    # Stagiaire management endpoints (Admin only)
+    path('api/stagiaires/', include('users.stagiaire_urls')),
+
+    # Admin management endpoints (Admin only)
+    path('api/admins/', include('users.admin_urls')),
+
+    # Quiz management endpoints
     path('api/quizzes/', include('quizzes.urls')),
+
+    # Quiz responses and results endpoints
     path('api/responses/', include('responses.urls')),
 
     # API Documentation

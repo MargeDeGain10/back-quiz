@@ -17,9 +17,11 @@ from django.utils import timezone
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.openapi import AutoSchema
 
 from .serializers import (
-    LoginSerializer, UserProfileSerializer, ChangePasswordSerializer,
+    LoginSerializer, LogoutSerializer, UserProfileSerializer, ChangePasswordSerializer,
     PasswordResetSerializer, UserCreateSerializer, StagiaireCreateSerializer,
     StagiaireUpdateSerializer, StagiaireDetailSerializer
 )
@@ -36,6 +38,26 @@ class LoginView(APIView):
     """
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        request=LoginSerializer,
+        responses={
+            200: OpenApiResponse(
+                description='Connexion réussie',
+                response={
+                    'type': 'object',
+                    'properties': {
+                        'refresh': {'type': 'string', 'description': 'Token de rafraîchissement JWT'},
+                        'access': {'type': 'string', 'description': 'Token d\'accès JWT'},
+                        'user': {'type': 'object', 'description': 'Informations de l\'utilisateur'}
+                    }
+                }
+            ),
+            400: OpenApiResponse(description='Erreurs de validation')
+        },
+        summary='Connexion utilisateur',
+        description='Authentifie un utilisateur avec login/password et retourne les tokens JWT',
+        tags=['Authentication']
+    )
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
@@ -71,6 +93,24 @@ class LogoutView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=LogoutSerializer,
+        responses={
+            200: OpenApiResponse(
+                description='Déconnexion réussie',
+                response={
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string', 'description': 'Message de confirmation'}
+                    }
+                }
+            ),
+            400: OpenApiResponse(description='Erreur lors de la déconnexion')
+        },
+        summary='Déconnexion utilisateur',
+        description='Déconnecte l\'utilisateur et blackliste le token de rafraîchissement',
+        tags=['Authentication']
+    )
     def post(self, request):
         try:
             refresh_token = request.data.get("refresh_token")
@@ -177,6 +217,41 @@ class UserCreateView(APIView):
 
     def post(self, request):
         serializer = UserCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response(
+                UserProfileSerializer(user).data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdminCreateView(APIView):
+    """
+    Vue pour créer un administrateur (admin seulement)
+    """
+    permission_classes = [IsAdmin]
+
+    @extend_schema(
+        request=UserCreateSerializer,
+        responses={
+            201: OpenApiResponse(
+                description='Administrateur créé avec succès',
+                response=UserProfileSerializer
+            ),
+            400: OpenApiResponse(description='Erreurs de validation'),
+            403: OpenApiResponse(description='Permission refusée - Admin requis')
+        },
+        summary='Créer un administrateur',
+        description='Crée un nouvel administrateur. Accessible uniquement aux administrateurs.',
+        tags=['Admin Management']
+    )
+    def post(self, request):
+        # Forcer le rôle ADMIN
+        data = request.data.copy()
+        data['role'] = 'ADMIN'
+
+        serializer = UserCreateSerializer(data=data)
         if serializer.is_valid():
             user = serializer.save()
             return Response(

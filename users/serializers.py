@@ -43,6 +43,13 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg, code='authorization')
 
 
+class LogoutSerializer(serializers.Serializer):
+    """
+    Serializer pour la déconnexion
+    """
+    refresh_token = serializers.CharField(required=True, help_text='Token de rafraîchissement JWT à blacklister')
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """
     Serializer pour afficher le profil utilisateur selon le rôle

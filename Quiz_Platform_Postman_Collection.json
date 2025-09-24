@@ -1,0 +1,996 @@
+{
+  "info": {
+    "name": "Quiz Platform API",
+    "description": "Collection complète des endpoints pour la plateforme de quiz avec API REST minimaliste.\n\n🔗 **Organisation par domaine fonctionnel :**\n- 🔐 Authentification (/api/auth/)\n- 👤 Profil utilisateur (/api/users/)\n- 👥 Gestion stagiaires (/api/stagiaires/)\n- 🔑 Gestion admins (/api/admins/)\n- 📚 Quiz et réponses (/api/quizzes/ et /api/responses/)\n\n📋 **Utilisation :**\n1. Commencez par vous connecter avec l'endpoint Login\n2. Les tokens sont automatiquement extraits et stockés\n3. Utilisez les autres endpoints selon votre rôle (ADMIN/STAGIAIRE)\n\n⚠️ **Note :** Utilisez le champ 'login' (pas 'email') pour l'authentification.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "parcours_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "questionnaire_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "question_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', response.access);",
+                  "    pm.collectionVariables.set('refresh_token', response.refresh);",
+                  "    pm.collectionVariables.set('user_id', response.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login", ""]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout", ""]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', response.access);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "token", "refresh", ""]
+            }
+          }
+        },
+        {
+          "name": "Check Auth Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/check-auth/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "check-auth", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 User Management",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", ""]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Prénom\",\n  \"last_name\": \"Nom\",\n  \"email\": \"nouveau@email.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", ""]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"ancien_mot_de_passe\",\n  \"new_password\": \"nouveau_mot_de_passe\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/change-password/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "change-password", ""]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/reset-password/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "reset-password", ""]
+            }
+          }
+        },
+        {
+          "name": "Create Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nouvel_admin@example.com\",\n  \"password\": \"motdepasse123\",\n  \"confirm_password\": \"motdepasse123\",\n  \"nom\": \"Dupont\",\n  \"prenom\": \"Jean\",\n  \"login\": \"admin2\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admins/create/",
+              "host": ["{{base_url}}"],
+              "path": ["admins", "create", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Stagiaires Management",
+      "item": [
+        {
+          "name": "List Stagiaires",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stagiaires/",
+              "host": ["{{base_url}}"],
+              "path": ["stagiaires", ""]
+            }
+          }
+        },
+        {
+          "name": "Create Stagiaire",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"stagiaire@example.com\",\n  \"first_name\": \"Jean\",\n  \"last_name\": \"Dupont\",\n  \"password\": \"password123\",\n  \"promotion\": \"2024\",\n  \"specialite\": \"Développement Web\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stagiaires/",
+              "host": ["{{base_url}}"],
+              "path": ["stagiaires", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Stagiaire Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stagiaires/{{user_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["stagiaires", "{{user_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Stagiaire",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jean\",\n  \"last_name\": \"Martin\",\n  \"promotion\": \"2024\",\n  \"specialite\": \"Développement Mobile\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stagiaires/{{user_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["stagiaires", "{{user_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Delete Stagiaire",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stagiaires/{{user_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["stagiaires", "{{user_id}}", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 Questionnaires & Questions (Admin)",
+      "item": [
+        {
+          "name": "List Questionnaires",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/quizzes/questionnaires/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questionnaires", ""]
+            }
+          }
+        },
+        {
+          "name": "Create Questionnaire",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('questionnaire_id', response.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titre\": \"Quiz Python Avancé\",\n  \"description\": \"Questionnaire sur les concepts avancés de Python\",\n  \"duree_minutes\": 30,\n  \"nombre_questions_affichees\": 15,\n  \"seuil_reussite\": 70,\n  \"actif\": true,\n  \"ordre_questions_aleatoire\": true,\n  \"penalite_mauvaise_reponse\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/quizzes/questionnaires/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questionnaires", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Questionnaire Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/quizzes/questionnaires/{{questionnaire_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questionnaires", "{{questionnaire_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Questionnaire",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titre\": \"Quiz Python Avancé - Mise à jour\",\n  \"description\": \"Version mise à jour du questionnaire\",\n  \"duree_minutes\": 45,\n  \"actif\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/quizzes/questionnaires/{{questionnaire_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questionnaires", "{{questionnaire_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Delete Questionnaire",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/quizzes/questionnaires/{{questionnaire_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questionnaires", "{{questionnaire_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "List Questions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/quizzes/questions/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questions", ""]
+            }
+          }
+        },
+        {
+          "name": "Create Question",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('question_id', response.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionnaire\": {{questionnaire_id}},\n  \"texte\": \"Quelle est la différence entre une liste et un tuple en Python?\",\n  \"type_question\": \"multiple_choice\",\n  \"choix\": [\n    {\"texte\": \"Les listes sont mutables, les tuples sont immutables\", \"est_correct\": true},\n    {\"texte\": \"Les tuples sont mutables, les listes sont immutables\", \"est_correct\": false},\n    {\"texte\": \"Il n'y a aucune différence\", \"est_correct\": false},\n    {\"texte\": \"Les tuples sont plus rapides\", \"est_correct\": false}\n  ],\n  \"difficulte\": \"moyen\",\n  \"points\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/quizzes/questions/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questions", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Question Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/quizzes/questions/{{question_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questions", "{{question_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Question",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texte\": \"Quelle est la principale différence entre une liste et un tuple en Python?\",\n  \"difficulte\": \"facile\",\n  \"points\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/quizzes/questions/{{question_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questions", "{{question_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Delete Question",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/quizzes/questions/{{question_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["quizzes", "questions", "{{question_id}}", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 Quiz Taking (Stagiaires)",
+      "item": [
+        {
+          "name": "Get Available Questionnaires",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/questionnaires-disponibles/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "questionnaires-disponibles", ""]
+            }
+          }
+        },
+        {
+          "name": "Start Quiz (Démarrer Parcours)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('parcours_id', response.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionnaire_id\": {{questionnaire_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Parcours Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/{{parcours_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", "{{parcours_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Current Question",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/{{parcours_id}}/question-courante/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", "{{parcours_id}}", "question-courante", ""]
+            }
+          }
+        },
+        {
+          "name": "Answer Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question_id\": {{question_id}},\n  \"choix_id\": 1,\n  \"texte_reponse\": \"Réponse optionnelle pour question ouverte\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/{{parcours_id}}/repondre/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", "{{parcours_id}}", "repondre", ""]
+            }
+          }
+        },
+        {
+          "name": "Finish Quiz",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/{{parcours_id}}/terminer/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", "{{parcours_id}}", "terminer", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Results & History",
+      "item": [
+        {
+          "name": "My Quiz History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/mes-parcours/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "mes-parcours", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Quiz Results",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/{{parcours_id}}/resultats/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", "{{parcours_id}}", "resultats", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Detailed Results",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/parcours/{{parcours_id}}/resultats-detailles/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "parcours", "{{parcours_id}}", "resultats-detailles", ""]
+            }
+          }
+        },
+        {
+          "name": "Get My Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/mes-recommandations/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "mes-recommandations", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📈 Admin Analytics & Reports",
+      "item": [
+        {
+          "name": "Student Synthesis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/stagiaire/{{user_id}}/synthese/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "stagiaire", "{{user_id}}", "synthese", ""]
+            }
+          }
+        },
+        {
+          "name": "Advanced Questionnaire Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/questionnaire/{{questionnaire_id}}/statistiques-avancees/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "questionnaire", "{{questionnaire_id}}", "statistiques-avancees", ""]
+            }
+          }
+        },
+        {
+          "name": "Global Synthesis Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/rapports/synthese-globale/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "rapports", "synthese-globale", ""]
+            }
+          }
+        },
+        {
+          "name": "Difficult Questions Analysis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/rapports/questions-difficiles/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "rapports", "questions-difficiles", ""]
+            }
+          }
+        },
+        {
+          "name": "Export Data (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/rapports/export/?format=csv&type=parcours",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "rapports", "export", ""],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "type",
+                  "value": "parcours"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Recalculate Analytics",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/responses/maintenance/recalculer-analyses/",
+              "host": ["{{base_url}}"],
+              "path": ["responses", "maintenance", "recalculer-analyses", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📖 API Documentation",
+      "item": [
+        {
+          "name": "OpenAPI Schema",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/schema/",
+              "host": ["{{base_url}}"],
+              "path": ["schema", ""]
+            }
+          }
+        },
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/schema/swagger-ui/",
+              "host": ["{{base_url}}"],
+              "path": ["schema", "swagger-ui", ""]
+            }
+          }
+        },
+        {
+          "name": "ReDoc",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/schema/redoc/",
+              "host": ["{{base_url}}"],
+              "path": ["schema", "redoc", ""]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

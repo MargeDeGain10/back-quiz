@@ -176,3 +176,7 @@ static/
 
 # Documentation
 docs/promt.md
+venv/lib/
+venv/lib/python3.12/site-packages/pip-23.2.1.dist-info/AUTHORS.txt
+venv/lib/python3.12/site-packages/pip-23.2.1.dist-info/INSTALLER
+*.pyc
