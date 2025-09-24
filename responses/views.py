@@ -7,13 +7,20 @@ from django.utils import timezone
 from django.db import transaction
 from django.core.exceptions import ValidationError
 
-from users.permissions import IsStagiaire
-from .models import Parcours, ReponseUtilisateur, ReponseUtilisateurSelection
+from users.permissions import IsStagiaire, IsAdmin
+from users.models import Stagiaire
+from .models import (
+    Parcours, ReponseUtilisateur, ReponseUtilisateurSelection,
+    AnalyseQuestion, AnalyseStagiaire, AnalyseQuestionnaire
+)
 from .serializers import (
     QuestionnairesDisponiblesSerializer, ParcoursListSerializer,
     ParcoursDetailSerializer, QuestionCouranteSerializer,
     ReponseUtilisateurSerializer, ParcoursResultatsSerializer,
-    DemarrerParcoursSerializer
+    DemarrerParcoursSerializer, ParcoursResultatsDetaillesSerializer,
+    AnalyseQuestionSerializer, AnalyseStagiaireSerializer,
+    AnalyseQuestionnaireSerializer, SyntheseStagiaireSerializer,
+    StatistiquesGlobalesSerializer
 )
 from quizzes.models import Questionnaire, Question, Reponse
 
@@ -178,7 +185,8 @@ def repondre_question(request, parcours_id):
             # Créer la réponse utilisateur
             reponse_utilisateur = ReponseUtilisateur.objects.create(
                 parcours=parcours,
-                question=question
+                question=question,
+                temps_reponse_sec=temps_reponse_sec
             )
 
             # Ajouter les sélections de réponses
@@ -189,7 +197,11 @@ def repondre_question(request, parcours_id):
                     reponse=reponse
                 )
 
-            # Mettre à jour le temps passé
+            # Calculer et sauvegarder le score de cette réponse
+            reponse_utilisateur.score_obtenu = reponse_utilisateur.calculer_score()
+            reponse_utilisateur.save()
+
+            # Mettre à jour le temps passé du parcours
             parcours.temps_passe_sec += temps_reponse_sec
             parcours.save()
 
@@ -238,11 +250,14 @@ def terminer_parcours(request, parcours_id):
             if action == 'abandonner':
                 parcours.statut = 'ABANDONNE'
                 parcours.note_obtenue = None
+                parcours.note_sur_20 = None
                 message = 'Parcours abandonné.'
             else:
                 parcours.statut = 'TERMINE'
                 parcours.note_obtenue = parcours.calculer_note()
-                message = f'Parcours terminé. Note obtenue: {parcours.note_obtenue}/100'
+                parcours.note_sur_20 = parcours.calculer_note_sur_20()
+                parcours.temps_moyen_par_question = parcours.calculer_temps_moyen_par_question()
+                message = f'Parcours terminé. Note obtenue: {parcours.note_obtenue}/100 ({parcours.note_sur_20}/20)'
 
             parcours.save()
 
@@ -280,3 +295,327 @@ class ParcoursResultatsView(generics.RetrieveAPIView):
             stagiaire=self.request.user.stagiaire_profile,
             statut__in=['TERMINE', 'ABANDONNE']
         )
+
+
+# ============ NOUVELLES VUES AVANCÉES ============
+
+class ParcoursResultatsDetaillesView(generics.RetrieveAPIView):
+    """Vue pour résultats détaillés avec analyses avancées"""
+    serializer_class = ParcoursResultatsDetaillesSerializer
+    permission_classes = [IsAuthenticated, IsStagiaire]
+
+    def get_queryset(self):
+        return Parcours.objects.filter(
+            stagiaire=self.request.user.stagiaire_profile,
+            statut__in=['TERMINE', 'ABANDONNE']
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        parcours = self.get_object()
+
+        # Calculer et sauvegarder la note sur 20 si pas déjà fait
+        if parcours.note_sur_20 is None:
+            parcours.note_sur_20 = parcours.calculer_note_sur_20()
+            parcours.temps_moyen_par_question = parcours.calculer_temps_moyen_par_question()
+            parcours.save()
+
+        # Calculer les scores détaillés pour chaque réponse
+        for reponse_user in parcours.reponses_utilisateur.all():
+            if reponse_user.score_obtenu is None:
+                reponse_user.score_obtenu = reponse_user.calculer_score()
+                reponse_user.save()
+
+        return super().retrieve(request, *args, **kwargs)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdmin])
+def synthese_stagiaire(request, stagiaire_id):
+    """Vue synthèse complète d'un stagiaire pour les admins"""
+    try:
+        stagiaire = Stagiaire.objects.get(id=stagiaire_id)
+
+        # Créer ou mettre à jour l'analyse du stagiaire
+        analyse, created = AnalyseStagiaire.objects.get_or_create(stagiaire=stagiaire)
+        analyse.mettre_a_jour_statistiques()
+
+        serializer = SyntheseStagiaireSerializer(stagiaire, context={'request': request})
+        return Response(serializer.data)
+
+    except Stagiaire.DoesNotExist:
+        return Response(
+            {'error': 'Stagiaire introuvable.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdmin])
+def statistiques_questionnaire_avancees(request, questionnaire_id):
+    """Statistiques avancées d'un questionnaire pour les admins"""
+    try:
+        questionnaire = Questionnaire.objects.get(id=questionnaire_id)
+
+        # Créer ou mettre à jour l'analyse du questionnaire
+        analyse, created = AnalyseQuestionnaire.objects.get_or_create(questionnaire=questionnaire)
+        analyse.mettre_a_jour_statistiques()
+
+        # Mettre à jour les analyses des questions
+        for question in questionnaire.questions.all():
+            analyse_question, created = AnalyseQuestion.objects.get_or_create(question=question)
+            analyse_question.mettre_a_jour_statistiques()
+
+        serializer = AnalyseQuestionnaireSerializer(analyse, context={'request': request})
+        return Response(serializer.data)
+
+    except Questionnaire.DoesNotExist:
+        return Response(
+            {'error': 'Questionnaire introuvable.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdmin])
+def synthese_globale(request):
+    """Dashboard principal avec statistiques globales pour les admins"""
+
+    # Mettre à jour les analyses de tous les stagiaires actifs
+    for stagiaire in Stagiaire.objects.filter(user__is_active=True):
+        if stagiaire.parcours.filter(statut='TERMINE').exists():
+            analyse, created = AnalyseStagiaire.objects.get_or_create(stagiaire=stagiaire)
+            analyse.mettre_a_jour_statistiques()
+
+    # Mettre à jour les analyses de tous les questionnaires utilisés
+    for questionnaire in Questionnaire.objects.filter(parcours__isnull=False).distinct():
+        analyse, created = AnalyseQuestionnaire.objects.get_or_create(questionnaire=questionnaire)
+        analyse.mettre_a_jour_statistiques()
+
+    # Utiliser un objet factice car le serializer n'a pas besoin d'instance
+    serializer = StatistiquesGlobalesSerializer()
+    data = serializer.to_representation(None)
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdmin])
+def analyse_questions_difficiles(request):
+    """Endpoint pour analyser les questions les plus difficiles du système"""
+    seuil = request.GET.get('seuil', 60)
+    try:
+        seuil = float(seuil)
+    except (ValueError, TypeError):
+        seuil = 60
+
+    questions_difficiles = []
+
+    # Analyser toutes les questions qui ont été tentées
+    for question in Question.objects.filter(reponses_utilisateur__isnull=False).distinct():
+        analyse, created = AnalyseQuestion.objects.get_or_create(question=question)
+        analyse.mettre_a_jour_statistiques()
+
+        if analyse.taux_reussite < seuil and analyse.nombre_tentatives >= 3:  # Au moins 3 tentatives
+            questions_difficiles.append(analyse)
+
+    # Trier par taux de réussite croissant (plus difficile en premier)
+    questions_difficiles.sort(key=lambda x: x.taux_reussite)
+
+    serializer = AnalyseQuestionSerializer(questions_difficiles[:20], many=True)  # Top 20
+    return Response({
+        'seuil_utilise': seuil,
+        'nombre_questions_analysees': len(questions_difficiles),
+        'questions_difficiles': serializer.data
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdmin])
+def export_donnees(request):
+    """Export des données en CSV pour reporting"""
+    import csv
+    from django.http import HttpResponse
+    from io import StringIO
+
+    type_export = request.data.get('type', 'parcours')
+
+    if type_export == 'parcours':
+        # Export des parcours terminés
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="parcours_export.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'ID', 'Stagiaire', 'Email', 'Société', 'Questionnaire',
+            'Date', 'Statut', 'Note (/100)', 'Note (/20)', 'Temps (min)',
+            'Questions correctes', 'Total questions'
+        ])
+
+        for parcours in Parcours.objects.filter(statut__in=['TERMINE', 'ABANDONNE']).select_related(
+            'stagiaire__user', 'questionnaire'
+        ):
+            stats = parcours.calculer_statistiques_detaillees()
+            writer.writerow([
+                parcours.id,
+                f"{parcours.stagiaire.user.prenom} {parcours.stagiaire.user.nom}",
+                parcours.stagiaire.user.email,
+                parcours.stagiaire.societe,
+                parcours.questionnaire.nom,
+                parcours.date_realisation.strftime('%Y-%m-%d %H:%M'),
+                parcours.statut,
+                parcours.note_obtenue or 0,
+                parcours.note_sur_20 or 0,
+                parcours.temps_passe_minutes,
+                stats['questions_correctes'],
+                parcours.questionnaire.nombre_questions
+            ])
+
+        return response
+
+    elif type_export == 'stagiaires':
+        # Export des analyses stagiaires
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="stagiaires_export.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Nom', 'Prénom', 'Email', 'Société', 'Questionnaires terminés',
+            'Note moyenne (/20)', 'Temps total (h)', 'Niveau', 'Actif'
+        ])
+
+        for analyse in AnalyseStagiaire.objects.select_related('stagiaire__user'):
+            writer.writerow([
+                analyse.stagiaire.user.nom,
+                analyse.stagiaire.user.prenom,
+                analyse.stagiaire.user.email,
+                analyse.stagiaire.societe,
+                analyse.nombre_questionnaires_termines,
+                analyse.note_moyenne_sur_20,
+                analyse.temps_formation_heures,
+                analyse.niveau_global,
+                'Oui' if analyse.stagiaire.user.is_active else 'Non'
+            ])
+
+        return response
+
+    else:
+        return Response(
+            {'error': 'Type d\'export non supporté. Utilisez "parcours" ou "stagiaires".'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mes_recommandations(request):
+    """Recommandations personnalisées pour le stagiaire connecté"""
+    if not hasattr(request.user, 'stagiaire_profile'):
+        return Response(
+            {'error': 'Accès réservé aux stagiaires.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    stagiaire = request.user.stagiaire_profile
+
+    # Créer ou mettre à jour l'analyse
+    analyse, created = AnalyseStagiaire.objects.get_or_create(stagiaire=stagiaire)
+    analyse.mettre_a_jour_statistiques()
+
+    recommandations = {
+        'niveau_actuel': analyse.niveau_global,
+        'note_moyenne': analyse.note_moyenne_sur_20,
+        'points_forts': [],
+        'points_amelioration': analyse.obtenir_domaines_amelioration(),
+        'questionnaires_suggeres': [],
+        'objectifs_personnalises': []
+    }
+
+    # Identifier les points forts
+    parcours_excellents = stagiaire.parcours.filter(
+        statut='TERMINE',
+        note_sur_20__gte=16
+    ).count()
+
+    if parcours_excellents > 0:
+        recommandations['points_forts'].append(
+            f"Excellente performance sur {parcours_excellents} questionnaire(s)"
+        )
+
+    parcours_rapides = stagiaire.parcours.filter(
+        statut='TERMINE',
+        temps_moyen_par_question__lt=60
+    ).count()
+
+    if parcours_rapides > 0:
+        recommandations['points_forts'].append(
+            f"Rapidité d'exécution sur {parcours_rapides} questionnaire(s)"
+        )
+
+    # Suggérer des questionnaires
+    questionnaires_non_tentes = Questionnaire.objects.exclude(
+        parcours__stagiaire=stagiaire
+    )
+
+    if questionnaires_non_tentes.exists():
+        # Suggérer les questionnaires les plus populaires non tentés
+        for questionnaire in questionnaires_non_tentes[:3]:
+            recommandations['questionnaires_suggeres'].append({
+                'id': questionnaire.id,
+                'nom': questionnaire.nom,
+                'description': questionnaire.description,
+                'duree_minutes': questionnaire.duree_minutes,
+                'nombre_questions': questionnaire.nombre_questions
+            })
+
+    # Objectifs personnalisés
+    if analyse.note_moyenne_sur_20 < 12:
+        recommandations['objectifs_personnalises'].append(
+            "Objectif: Atteindre une moyenne de 12/20"
+        )
+    elif analyse.note_moyenne_sur_20 < 16:
+        recommandations['objectifs_personnalises'].append(
+            "Objectif: Atteindre une moyenne de 16/20 (niveau Excellence)"
+        )
+
+    if analyse.nombre_questionnaires_termines < 5:
+        recommandations['objectifs_personnalises'].append(
+            "Objectif: Terminer 5 questionnaires pour débloquer le badge Persévérant"
+        )
+
+    return Response(recommandations)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdmin])
+def recalculer_analyses(request):
+    """Recalcule toutes les analyses du système (utile après des modifications)"""
+    operations = {
+        'stagiaires_analyses': 0,
+        'questionnaires_analyses': 0,
+        'questions_analysees': 0
+    }
+
+    # Recalculer analyses stagiaires
+    for stagiaire in Stagiaire.objects.all():
+        if stagiaire.parcours.exists():
+            analyse, created = AnalyseStagiaire.objects.get_or_create(stagiaire=stagiaire)
+            analyse.mettre_a_jour_statistiques()
+            operations['stagiaires_analyses'] += 1
+
+    # Recalculer analyses questionnaires
+    for questionnaire in Questionnaire.objects.filter(parcours__isnull=False).distinct():
+        analyse, created = AnalyseQuestionnaire.objects.get_or_create(questionnaire=questionnaire)
+        analyse.mettre_a_jour_statistiques()
+        operations['questionnaires_analyses'] += 1
+
+        # Recalculer analyses questions
+        for question in questionnaire.questions.all():
+            if question.reponses_utilisateur.exists():
+                analyse_q, created = AnalyseQuestion.objects.get_or_create(question=question)
+                analyse_q.mettre_a_jour_statistiques()
+                operations['questions_analysees'] += 1
+
+    return Response({
+        'message': 'Recalcul terminé avec succès',
+        'operations_effectuees': operations
+    })
