@@ -298,3 +298,4 @@ class QuestionViewSet(viewsets.ModelViewSet):
             'message': 'Question dupliquée avec succès',
             'question': serializer.data
         }, status=status.HTTP_201_CREATED)
+

@@ -8,9 +8,11 @@ class ReponseSerializer(serializers.ModelSerializer):
     """
     Serializer pour les réponses d'une question
     """
+    question_id = serializers.ReadOnlyField(source='question.id')
+
     class Meta:
         model = Reponse
-        fields = ['id', 'texte', 'est_correcte']
+        fields = ['id', 'question_id', 'texte', 'est_correcte']
 
     def validate_texte(self, value):
         if not value or not value.strip():
@@ -24,15 +26,16 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
     """
     reponses = ReponseSerializer(many=True, read_only=True)
     nombre_reponses = serializers.ReadOnlyField()
+    questionnaire_id = serializers.ReadOnlyField(source='questionnaire.id')
 
     class Meta:
         model = Question
-        fields = ['id', 'intitule', 'reponses', 'nombre_reponses']
+        fields = ['id', 'questionnaire_id', 'intitule', 'reponses', 'nombre_reponses']
 
 
-class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
+class QuestionNestedSerializer(serializers.ModelSerializer):
     """
-    Serializer pour créer/modifier une question avec ses réponses
+    Serializer pour les questions imbriquées dans un questionnaire (sans questionnaire_id)
     """
     reponses = ReponseSerializer(many=True)
 
@@ -61,11 +64,59 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
 
         return value
 
+
+class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer pour créer/modifier une question avec ses réponses (pour endpoint indépendant)
+    """
+    reponses = ReponseSerializer(many=True)
+    questionnaire_id = serializers.IntegerField(required=True)
+
+    class Meta:
+        model = Question
+        fields = ['id', 'questionnaire_id', 'intitule', 'reponses']
+
+    def validate_intitule(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('L\'intitulé de la question ne peut pas être vide.')
+        return value.strip()
+
+    def validate_reponses(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError('Une question doit avoir au moins 2 réponses.')
+
+        if len(value) > 5:
+            raise serializers.ValidationError('Une question ne peut pas avoir plus de 5 réponses.')
+
+        # Vérifier qu'il y a au moins une réponse correcte
+        correctes = [r for r in value if r.get('est_correcte', False)]
+
+        if len(correctes) == 0:
+            # Marquer la première réponse comme correcte par défaut
+            value[0]['est_correcte'] = True
+
+        return value
+
+
+
+    def validate_questionnaire_id(self, value):
+        if value is not None:
+            try:
+                Questionnaire.objects.get(id=value)
+            except Questionnaire.DoesNotExist:
+                raise serializers.ValidationError('Le questionnaire spécifié n\'existe pas.')
+        return value
+
     def create(self, validated_data):
         reponses_data = validated_data.pop('reponses')
+        questionnaire_id = validated_data.pop('questionnaire_id', None)
+
+        if questionnaire_id is None:
+            raise serializers.ValidationError('Le champ questionnaire_id est requis.')
 
         with transaction.atomic():
-            question = Question.objects.create(**validated_data)
+            questionnaire = Questionnaire.objects.get(id=questionnaire_id)
+            question = Question.objects.create(questionnaire=questionnaire, **validated_data)
 
             for reponse_data in reponses_data:
                 Reponse.objects.create(question=question, **reponse_data)
@@ -98,23 +149,25 @@ class QuestionSerializer(serializers.ModelSerializer):
     Serializer simple pour une question (pour les stagiaires)
     """
     reponses = ReponseSerializer(many=True, read_only=True)
+    questionnaire_id = serializers.ReadOnlyField(source='questionnaire.id')
 
     class Meta:
         model = Question
-        fields = ['id', 'intitule', 'reponses']
+        fields = ['id', 'questionnaire_id', 'intitule', 'reponses']
 
 
 class QuestionnaireListSerializer(serializers.ModelSerializer):
     """
     Serializer pour la liste des questionnaires
     """
+    questions = QuestionDetailSerializer(many=True, read_only=True)
     nombre_questions = serializers.ReadOnlyField()
 
     class Meta:
         model = Questionnaire
         fields = [
             'id', 'nom', 'description', 'date_creation',
-            'duree_minutes', 'nombre_questions'
+            'duree_minutes', 'questions', 'nombre_questions'
         ]
 
 
@@ -159,7 +212,7 @@ class QuestionnaireCreateUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer pour créer/modifier un questionnaire avec ses questions
     """
-    questions = QuestionCreateUpdateSerializer(many=True, required=False)
+    questions = QuestionNestedSerializer(many=True, required=False)
 
     class Meta:
         model = Questionnaire

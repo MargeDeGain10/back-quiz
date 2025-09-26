@@ -98,43 +98,48 @@ class Parcours(models.Model):
 
     def _calculer_score_question(self, reponse_user, avec_penalites=False):
         """
-        Calcule le score pour une question donnée
-        """
-        reponses_correctes = list(reponse_user.question.reponses_correctes.all())
-        reponses_selectionnees = list(reponse_user.reponses_selectionnees.all())
-        total_reponses = reponse_user.question.reponses.count()
+        Calcule le score pour une question donnée (LOGIQUE AMÉLIORÉE)
 
+        ÉTAPES :
+        1. Récupérer toutes les réponses correctes de la question
+        2. Récupérer toutes les réponses sélectionnées par l'utilisateur
+        3. Comparer et calculer le score selon le type de question
+        """
+        # ÉTAPE 1: Récupérer les réponses correctes (celles avec est_correcte=True)
+        reponses_correctes = set(reponse_user.question.reponses_correctes.all())
+        # ÉTAPE 2: Récupérer les réponses sélectionnées par l'utilisateur
+        reponses_selectionnees = set(reponse_user.reponses_selectionnees.all())
+
+        # Vérifications de base
         if not reponses_correctes:
             return Decimal('0')
-
-        # Si aucune réponse sélectionnée
         if not reponses_selectionnees:
             return Decimal('0')
 
-        # Calcul pour choix unique (1 seule bonne réponse)
+        # ÉTAPE 3A: CHOIX UNIQUE (1 seule bonne réponse)
         if len(reponses_correctes) == 1:
+            # Comparaison directe : tout bon ou tout faux
             if reponses_selectionnees == reponses_correctes:
-                return Decimal('1')
+                return Decimal('1')  # 100% correct
             else:
-                return Decimal('0')
+                return Decimal('0')  # 0% incorrect
 
-        # Calcul pour choix multiples
-        bonnes_selections = len(set(reponses_selectionnees) & set(reponses_correctes))
-        mauvaises_selections = len(set(reponses_selectionnees) - set(reponses_correctes))
-        reponses_correctes_manquees = len(set(reponses_correctes) - set(reponses_selectionnees))
+        # ÉTAPE 3B: CHOIX MULTIPLES (plusieurs bonnes réponses)
+        # Calculs avec des sets pour éviter les doublons
+        bonnes_selections = len(reponses_selectionnees & reponses_correctes)  # Intersection
+        mauvaises_selections = len(reponses_selectionnees - reponses_correctes)  # Différence
 
         if avec_penalites:
-            # Formule avec pénalités: (bonnes - mauvaises) / total_correctes
+            # FORMULE AVEC PÉNALITÉS: (bonnes - mauvaises) / total_correctes
+            # Si plus de mauvaises que de bonnes → score peut être négatif → max(0, score)
             score = (bonnes_selections - mauvaises_selections) / len(reponses_correctes)
             return max(Decimal('0'), Decimal(str(score)))
         else:
-            # Formule standard: bonnes / total_correctes
-            if bonnes_selections == len(reponses_correctes) and mauvaises_selections == 0:
-                return Decimal('1')  # 100% correct
-            elif bonnes_selections > 0:
-                return Decimal(str(bonnes_selections / len(reponses_correctes)))
-            else:
-                return Decimal('0')
+            # FORMULE STANDARD AMÉLIORÉE: bonnes / total_correctes (partiel pur)
+            # Cette logique élimine la condition restrictive précédente
+            # Exemple: 2 bonnes sur 3 → 2/3 = 0.667 (peu importe les mauvaises)
+            score = bonnes_selections / len(reponses_correctes)
+            return Decimal(str(score))
 
     def calculer_note_sur_20(self, avec_penalites=False):
         """

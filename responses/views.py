@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import transaction
 from django.core.exceptions import ValidationError
+from drf_spectacular.utils import extend_schema
 
 from users.permissions import IsStagiaire, IsAdmin
 from users.models import Stagiaire
@@ -20,7 +21,7 @@ from .serializers import (
     DemarrerParcoursSerializer, ParcoursResultatsDetaillesSerializer,
     AnalyseQuestionSerializer, AnalyseStagiaireSerializer,
     AnalyseQuestionnaireSerializer, SyntheseStagiaireSerializer,
-    StatistiquesGlobalesSerializer
+    StatistiquesGlobalesSerializer, RepondreQuestionSerializer
 )
 from quizzes.models import Questionnaire, Question, Reponse
 
@@ -33,33 +34,65 @@ class QuestionnairesDisponiblesListView(generics.ListAPIView):
         return Questionnaire.objects.all().order_by('nom')
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated, IsStagiaire])
-def demarrer_parcours(request):
-    serializer = DemarrerParcoursSerializer(data=request.data, context={'request': request})
+class ParcoursListCreateView(generics.ListCreateAPIView):
+    """
+    GET: Liste des parcours (stagiaires: leurs parcours, admins: tous les parcours)
+    POST: Démarrer un nouveau parcours (stagiaires uniquement)
+    """
+    permission_classes = [IsAuthenticated]
 
-    if serializer.is_valid():
-        try:
-            parcours = serializer.save()
+    def get_queryset(self):
+        if hasattr(self.request.user, 'stagiaire_profile'):
+            # Stagiaire : ses propres parcours
+            return Parcours.objects.filter(
+                stagiaire=self.request.user.stagiaire_profile
+            ).order_by('-date_realisation')
+        else:
+            # Admin : tous les parcours
+            return Parcours.objects.all().order_by('-date_realisation')
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return DemarrerParcoursSerializer
+        return ParcoursListSerializer
+
+    def create(self, request, *args, **kwargs):
+        # Seuls les stagiaires peuvent démarrer des parcours
+        if not hasattr(request.user, 'stagiaire_profile'):
             return Response(
-                ParcoursDetailSerializer(parcours, context={'request': request}).data,
-                status=status.HTTP_201_CREATED
-            )
-        except Exception as e:
-            return Response(
-                {'error': f'Erreur lors de la création du parcours: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {'error': 'Seuls les stagiaires peuvent démarrer des parcours.'},
+                status=status.HTTP_403_FORBIDDEN
             )
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+
+        if serializer.is_valid():
+            try:
+                parcours = serializer.save()
+                return Response(
+                    ParcoursDetailSerializer(parcours, context={'request': request}).data,
+                    status=status.HTTP_201_CREATED
+                )
+            except Exception as e:
+                return Response(
+                    {'error': f'Erreur lors de la création du parcours: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ParcoursDetailView(generics.RetrieveAPIView):
     serializer_class = ParcoursDetailSerializer
-    permission_classes = [IsAuthenticated, IsStagiaire]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Parcours.objects.filter(stagiaire=self.request.user.stagiaire_profile)
+        if hasattr(self.request.user, 'stagiaire_profile'):
+            # Stagiaire : ses propres parcours uniquement
+            return Parcours.objects.filter(stagiaire=self.request.user.stagiaire_profile)
+        else:
+            # Admin : tous les parcours
+            return Parcours.objects.all()
 
 
 @api_view(['GET'])
@@ -114,6 +147,15 @@ def question_courante(request, parcours_id):
     return Response(serializer.data)
 
 
+@extend_schema(
+    request=RepondreQuestionSerializer,
+    responses={
+        200: {"description": "Réponse enregistrée avec succès"},
+        400: {"description": "Erreur de validation"},
+    },
+    description="Répondre à une question dans un parcours en cours",
+    summary="Répondre à une question"
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsStagiaire])
 def repondre_question(request, parcours_id):

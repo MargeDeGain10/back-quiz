@@ -38,7 +38,7 @@ urlpatterns = [
     path('api/quizzes/', include('quizzes.urls')),
 
     # Quiz responses and results endpoints
-    path('api/responses/', include('responses.urls')),
+    path('api/parcours/', include('responses.urls')),
 
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

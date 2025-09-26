@@ -37,14 +37,17 @@ class QuestionnairesDisponiblesSerializer(serializers.ModelSerializer):
 
 class ParcoursListSerializer(serializers.ModelSerializer):
     questionnaire_nom = serializers.CharField(source='questionnaire.nom', read_only=True)
+    stagiaire_nom = serializers.CharField(source='stagiaire.user.get_full_name', read_only=True)
+    stagiaire_email = serializers.CharField(source='stagiaire.user.email', read_only=True)
     temps_passe_minutes = serializers.DecimalField(max_digits=10, decimal_places=1, read_only=True)
     progression_pourcentage = serializers.DecimalField(max_digits=5, decimal_places=1, read_only=True)
 
     class Meta:
         model = Parcours
         fields = [
-            'id', 'questionnaire_nom', 'date_realisation', 'temps_passe_minutes',
-            'note_obtenue', 'statut', 'progression_pourcentage'
+            'id', 'questionnaire_nom', 'stagiaire_nom', 'stagiaire_email',
+            'date_realisation', 'temps_passe_minutes', 'note_obtenue',
+            'statut', 'progression_pourcentage'
         ]
 
 
@@ -128,6 +131,24 @@ class ReponseUtilisateurSerializer(serializers.ModelSerializer):
                             f"La réponse {reponse_id} n'appartient pas à cette question."
                         )
         return value
+
+
+class RepondreQuestionSerializer(serializers.Serializer):
+    """
+    Serializer pour répondre à une question dans un parcours
+    """
+    question_id = serializers.IntegerField(help_text="ID de la question à laquelle répondre")
+    reponses_selectionnees_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+        help_text="Liste des IDs des réponses sélectionnées"
+    )
+    temps_reponse_sec = serializers.IntegerField(
+        required=False,
+        default=0,
+        help_text="Temps pris pour répondre en secondes"
+    )
 
 
 class ReponseUtilisateurDetailSerializer(serializers.ModelSerializer):

@@ -10,39 +10,36 @@ urlpatterns = [
          name='questionnaires-disponibles'),
 
     # Gestion des parcours
-    path('parcours/',
-         views.demarrer_parcours,
-         name='demarrer-parcours'),
+    path('',
+         views.ParcoursListCreateView.as_view(),
+         name='parcours-list-create'),
 
-    path('parcours/<int:pk>/',
+    path('<int:pk>/',
          views.ParcoursDetailView.as_view(),
          name='parcours-detail'),
 
-    path('parcours/<int:parcours_id>/question-courante/',
+    path('<int:parcours_id>/question-courante/',
          views.question_courante,
          name='question-courante'),
 
-    path('parcours/<int:parcours_id>/repondre/',
+    path('<int:parcours_id>/repondre/',
          views.repondre_question,
          name='repondre-question'),
 
-    path('parcours/<int:parcours_id>/terminer/',
+    path('<int:parcours_id>/terminer/',
          views.terminer_parcours,
          name='terminer-parcours'),
 
-    # Historique et résultats
-    path('mes-parcours/',
-         views.MesParcoursListView.as_view(),
-         name='mes-parcours'),
+    # Historique et résultats (deprecated - utiliser GET /api/parcours/ à la place)
 
-    path('parcours/<int:pk>/resultats/',
+    path('<int:pk>/resultats/',
          views.ParcoursResultatsView.as_view(),
          name='parcours-resultats'),
 
     # =================== NOUVEAUX ENDPOINTS AVANCÉS ===================
 
     # Résultats détaillés avec analyses avancées
-    path('parcours/<int:pk>/resultats-detailles/',
+    path('<int:pk>/resultats-detailles/',
          views.ParcoursResultatsDetaillesView.as_view(),
          name='parcours-resultats-detailles'),
 
