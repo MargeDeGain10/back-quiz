@@ -1,12 +1,10 @@
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Count, Q
-from django.db import transaction
-from django.utils import timezone
+from django.db.models import Q
 
-from users.permissions import IsAdmin, IsAdminOrStagiaire
-from .models import Questionnaire, Question, Reponse
+from users.permissions import IsAdmin
+from .models import Questionnaire, Question
 from .serializers import (
     QuestionnaireListSerializer, QuestionnaireDetailSerializer,
     QuestionnaireCreateUpdateSerializer, QuestionnaireStatsSerializer,
@@ -145,48 +143,6 @@ class QuestionnaireViewSet(viewsets.ModelViewSet):
             'questionnaires_populaires': popular_data
         })
 
-    @action(detail=True, methods=['post'])
-    def dupliquer(self, request, pk=None):
-        """
-        Dupliquer un questionnaire avec toutes ses questions et réponses
-        """
-        instance = self.get_object()
-
-        with transaction.atomic():
-            # Créer une copie du questionnaire
-            nouveau_nom = f"{instance.nom} (Copie)"
-
-            # S'assurer que le nom est unique
-            counter = 1
-            while Questionnaire.objects.filter(nom=nouveau_nom).exists():
-                nouveau_nom = f"{instance.nom} (Copie {counter})"
-                counter += 1
-
-            nouveau_questionnaire = Questionnaire.objects.create(
-                nom=nouveau_nom,
-                description=instance.description,
-                duree_minutes=instance.duree_minutes
-            )
-
-            # Copier toutes les questions et leurs réponses
-            for question in instance.questions.all():
-                nouvelle_question = Question.objects.create(
-                    questionnaire=nouveau_questionnaire,
-                    intitule=question.intitule
-                )
-
-                for reponse in question.reponses.all():
-                    Reponse.objects.create(
-                        question=nouvelle_question,
-                        texte=reponse.texte,
-                        est_correcte=reponse.est_correcte
-                    )
-
-        serializer = QuestionnaireDetailSerializer(nouveau_questionnaire)
-        return Response({
-            'message': 'Questionnaire dupliqué avec succès',
-            'questionnaire': serializer.data
-        }, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['get'])
     def questions(self, request, pk=None):
@@ -205,22 +161,6 @@ class QuestionnaireViewSet(viewsets.ModelViewSet):
         serializer = QuestionDetailSerializer(questions, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'])
-    def ajouter_question(self, request, pk=None):
-        """
-        Ajouter une nouvelle question à un questionnaire
-        """
-        instance = self.get_object()
-
-        serializer = QuestionCreateUpdateSerializer(data=request.data)
-        if serializer.is_valid():
-            question = serializer.save(questionnaire=instance)
-            response_serializer = QuestionDetailSerializer(question)
-            return Response(
-                response_serializer.data,
-                status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class QuestionViewSet(viewsets.ModelViewSet):
@@ -271,31 +211,4 @@ class QuestionViewSet(viewsets.ModelViewSet):
             'message': f'Question supprimée avec succès du questionnaire "{questionnaire_nom}"'
         }, status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['post'])
-    def dupliquer(self, request, pk=None):
-        """
-        Dupliquer une question avec toutes ses réponses
-        """
-        instance = self.get_object()
-
-        with transaction.atomic():
-            # Créer une copie de la question
-            nouvelle_question = Question.objects.create(
-                questionnaire=instance.questionnaire,
-                intitule=f"{instance.intitule} (Copie)"
-            )
-
-            # Copier toutes les réponses
-            for reponse in instance.reponses.all():
-                Reponse.objects.create(
-                    question=nouvelle_question,
-                    texte=reponse.texte,
-                    est_correcte=reponse.est_correcte
-                )
-
-        serializer = QuestionDetailSerializer(nouvelle_question)
-        return Response({
-            'message': 'Question dupliquée avec succès',
-            'question': serializer.data
-        }, status=status.HTTP_201_CREATED)
 
