@@ -14,4 +14,5 @@ urlpatterns = [
     # Gestion des mots de passe
     path('change-password/', views.ChangePasswordView.as_view(), name='auth_change_password'),
     path('reset-password/', views.PasswordResetView.as_view(), name='auth_reset_password'),
+    path('reset-password-confirm/', views.PasswordResetConfirmView.as_view(), name='auth_reset_password_confirm'),
 ]

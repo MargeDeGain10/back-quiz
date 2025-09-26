@@ -89,9 +89,23 @@ class ChangePasswordSerializer(serializers.Serializer):
     """
     Serializer pour le changement de mot de passe
     """
-    old_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True)
-    confirm_password = serializers.CharField(write_only=True)
+    old_password = serializers.CharField(
+        write_only=True,
+        help_text="Mot de passe actuel de l'utilisateur",
+        style={'input_type': 'password'}
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        help_text="Nouveau mot de passe (minimum 8 caractères, doit contenir lettres et chiffres)",
+        style={'input_type': 'password'},
+        min_length=8
+    )
+    confirm_password = serializers.CharField(
+        write_only=True,
+        help_text="Confirmation du nouveau mot de passe (doit être identique)",
+        style={'input_type': 'password'},
+        min_length=8
+    )
 
     def validate_old_password(self, value):
         user = self.context['request'].user
@@ -128,22 +142,110 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class PasswordResetSerializer(serializers.Serializer):
     """
-    Serializer pour la réinitialisation de mot de passe
+    Serializer pour la demande de réinitialisation de mot de passe
     """
-    email = serializers.EmailField()
+    email = serializers.EmailField(
+        help_text="Adresse email de l'utilisateur pour recevoir le lien de réinitialisation",
+        required=True
+    )
 
     def validate_email(self, value):
+        """
+        Valide l'email mais ne révèle pas si l'utilisateur existe pour des raisons de sécurité
+        """
+        email = value.strip().lower()
+
+        # Validation de format de base (déjà fait par EmailField)
+        if not email:
+            raise serializers.ValidationError('L\'adresse email ne peut pas être vide.')
+
+        # Note: En production, nous ne devrions pas révéler si l'utilisateur existe
+        # mais pour le développement, gardons cette validation pour debugging
         try:
-            user = User.objects.get(email__iexact=value.strip())
+            user = User.objects.get(email__iexact=email)
             if not user.is_active:
-                raise serializers.ValidationError(
-                    'Ce compte utilisateur est désactivé.'
-                )
+                # Pour la sécurité, on ne révèle pas que le compte existe mais est inactif
+                # en production, on devrait traiter cela silencieusement
+                pass
         except User.DoesNotExist:
-            raise serializers.ValidationError(
-                'Aucun utilisateur avec cette adresse email.'
-            )
-        return value
+            # Pour la sécurité, on ne révèle pas que l'utilisateur n'existe pas
+            # en production, on devrait traiter cela silencieusement
+            pass
+
+        return email
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """
+    Serializer pour confirmer la réinitialisation de mot de passe avec token
+    """
+    uidb64 = serializers.CharField(
+        help_text="UID encodé en base64 de l'utilisateur",
+        required=True
+    )
+    token = serializers.CharField(
+        help_text="Token de réinitialisation généré par Django",
+        required=True
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        help_text="Nouveau mot de passe (minimum 8 caractères)",
+        style={'input_type': 'password'},
+        min_length=8,
+        required=True
+    )
+    confirm_password = serializers.CharField(
+        write_only=True,
+        help_text="Confirmation du nouveau mot de passe",
+        style={'input_type': 'password'},
+        min_length=8,
+        required=True
+    )
+
+    def validate(self, attrs):
+        new_password = attrs.get('new_password', '').strip()
+        confirm_password = attrs.get('confirm_password', '').strip()
+
+        # Vérifier que les mots de passe correspondent
+        if new_password != confirm_password:
+            raise serializers.ValidationError({
+                'confirm_password': 'Les mots de passe ne correspondent pas.'
+            })
+
+        # Valider le nouveau mot de passe selon les règles Django
+        try:
+            validate_password(new_password)
+        except ValidationError as e:
+            raise serializers.ValidationError({
+                'new_password': e.messages
+            })
+
+        # Valider le token et l'UID
+        from django.utils.http import urlsafe_base64_decode
+        from django.utils.encoding import force_str
+        from django.contrib.auth.tokens import default_token_generator
+
+        try:
+            uid = force_str(urlsafe_base64_decode(attrs['uidb64']))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError('Lien de réinitialisation invalide.')
+
+        if not default_token_generator.check_token(user, attrs['token']):
+            raise serializers.ValidationError('Token de réinitialisation expiré ou invalide.')
+
+        if not user.is_active:
+            raise serializers.ValidationError('Ce compte utilisateur est désactivé.')
+
+        attrs['user'] = user
+        return attrs
+
+    def save(self):
+        user = self.validated_data['user']
+        new_password = self.validated_data['new_password'].strip()
+        user.set_password(new_password)
+        user.save()
+        return user
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

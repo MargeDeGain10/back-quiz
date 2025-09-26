@@ -1,48 +1,60 @@
 # 🎯 Quiz Platform API
 
-Une plateforme complète de quiz et questionnaires avec API REST minimaliste, gestion des utilisateurs simplifiée et analyses détaillées.
+Une plateforme complète de quiz et questionnaires avec API REST optimisée, gestion des utilisateurs simplifiée et analyses détaillées avancées.
 
 ## 🚀 Fonctionnalités
 
 ### 👥 Gestion des utilisateurs simplifiée
-- **Authentification JWT** sécurisée avec refresh tokens
+- **Authentification JWT** sécurisée avec refresh tokens automatiques
 - **Système de rôles simplifié** : `ADMIN` et `STAGIAIRE` uniquement
-- **API organisée** par domaine fonctionnel
-- **Gestion des permissions** basée sur le rôle
+- **API organisée** par domaine fonctionnel pour une meilleure clarté
+- **Gestion des permissions** basée sur le rôle avec middleware sécurisé
 
-### 📝 Système de questionnaires
+### 📝 Système de questionnaires optimisé
 - **CRUD complet** pour les questionnaires et questions (Admin)
-- **Questions à choix unique ou multiples**
-- **Validation des contraintes métier**
-- **Gestion du temps** par questionnaire
+- **Questions à choix unique ou multiples** avec validation métier
+- **Système de réponses flexible** avec gestion des bonnes/mauvaises réponses
+- **Gestion du temps** par questionnaire avec contrôles avancés
+- **Validation des contraintes** métier (suppression sécurisée, etc.)
 
 ### 🎯 Passage de quiz avancé
-- **Suivi en temps réel** de la progression
-- **Calcul de score sophistiqué** avec pénalités optionnelles
-- **Recommandations personnalisées** basées sur les performances
-- **Analyse temporelle** de l'efficacité
+- **Suivi en temps réel** de la progression avec état persistant
+- **Calcul de score sophistiqué** avec algorithmes de notation avancés
+- **Support choix multiples** avec scoring partiel intelligent
+- **Pénalités optionnelles** pour les mauvaises réponses
+- **Recommandations personnalisées** basées sur l'analyse des performances
+- **Analyse temporelle** de l'efficacité (score/temps)
 
-### 📊 Analytics et reporting
+### 📊 Analytics et reporting avancés
 - **Analyses détaillées** par stagiaire, questionnaire et question
-- **Statistiques globales** et tendances
+- **Statistiques globales** avec tendances et métriques comparatives
 - **Identification automatique** des domaines d'amélioration
-- **Dashboard admin** avec métriques complètes
+- **Dashboard admin** avec métriques complètes en temps réel
+- **Export CSV** pour analyses externes
+- **Système de recommandations** basé sur l'IA
+
+### 🔄 Nouvelles fonctionnalités
+- **Système d'analyses automatiques** - AnalyseStagiaire, AnalyseQuestionnaire, AnalyseQuestion
+- **Calculs de performance** - Efficacité temporelle, niveaux de difficulté
+- **Maintenance automatisée** - Recalcul des statistiques
+- **API optimisée** - Suppression des endpoints redondants
 
 ## 🛠️ Stack technique
 
 - **Backend** : Django 4.2.7 + Django REST Framework 3.14.0
-- **Base de données** : PostgreSQL
+- **Base de données** : PostgreSQL (production) / SQLite (développement)
 - **Authentification** : JWT avec django-rest-framework-simplejwt
-- **Documentation API** : DRF Spectacular (OpenAPI 3.0)
-- **CORS** : django-cors-headers
-- **Validation** : django-filter pour filtrage avancé
+- **Documentation API** : DRF Spectacular (OpenAPI 3.0) avec Swagger UI
+- **CORS** : django-cors-headers pour intégration frontend
+- **Validation** : django-filter pour filtrage avancé et recherche
+- **Sécurité** : Permissions personnalisées et validation métier
 
 ## 📋 Prérequis
 
 - Python 3.8+
 - pip
 - Virtualenv (recommandé)
-- PostgreSQL (pour la production)
+- PostgreSQL 12+ (pour la production)
 
 ## ⚡ Installation rapide
 
@@ -69,21 +81,25 @@ pip install -r requirements.txt
 Créer un fichier `.env` à la racine :
 ```env
 # Configuration de base
-SECRET_KEY=votre_cle_secrete_django_ici
+SECRET_KEY=votre_cle_secrete_django_super_longue_et_securisee
 DEBUG=True
 
-# Configuration PostgreSQL
+# Configuration de base de données (PostgreSQL recommandé)
 DB_NAME=quiz_platform_db
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_HOST=localhost
 DB_PORT=5432
 
-# Frontend et CORS
+# CORS et Frontend
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 FRONTEND_URL=http://localhost:3000
 
-# Email (optionnel)
+# Configuration JWT
+JWT_ACCESS_TOKEN_LIFETIME_MINUTES=60
+JWT_REFRESH_TOKEN_LIFETIME_DAYS=7
+
+# Email (optionnel pour reset password)
 EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
@@ -92,12 +108,16 @@ EMAIL_HOST_USER=votre-email@gmail.com
 EMAIL_HOST_PASSWORD=votre-app-password
 ```
 
-### 5. Créer la base de données PostgreSQL
+### 5. Créer la base de données
 ```bash
+# PostgreSQL (recommandé pour production)
 createdb quiz_platform_db
+
+# Ou SQLite (automatique, pour développement)
+# Rien à faire, Django créera automatiquement db.sqlite3
 ```
 
-### 6. Migrations de base
+### 6. Migrations et initialisation
 ```bash
 python manage.py migrate
 ```
@@ -132,12 +152,81 @@ L'API sera accessible sur `http://localhost:8000`
 
 ### 🔐 Interface d'administration
 - **Django Admin** : `http://localhost:8000/admin/`
+- Login : admin / admin123
+
+### 📄 Documentation détaillée
+- **API Endpoints** : `docs/API_ENDPOINTS.md` - Guide complet des endpoints
+- **Guide Auth Rapide** : `docs/AUTH_QUICKSTART.md` - Démarrage rapide authentification
+- **Test Reset Password** : `docs/TESTING_RESET_PASSWORD.md` - Guide de test complet
+- **Modèles de données** : `docs/MODELS.md` - Documentation détaillée des modèles
+- **Frontend Integration** : `docs/FRONTEND.md`
+- **Déploiement** : `docs/DEPLOYMENT.md`
+
+## 🏗️ Architecture du projet
+
+```
+quiz_platform/
+├── quiz_platform/          # Configuration Django
+│   ├── settings.py         # Settings avec config environnement
+│   ├── urls.py            # URLs principales organisées
+│   └── wsgi.py            # Point d'entrée WSGI
+├── users/                  # Gestion utilisateurs et authentification
+│   ├── models.py          # User, Stagiaire (profils étendus)
+│   ├── serializers.py     # Sérialisation avec validation
+│   ├── views.py           # ViewSets et logique auth
+│   ├── permissions.py     # Permissions personnalisées
+│   ├── managers.py        # Custom UserManager
+│   └── auth_urls.py       # URLs authentification
+├── quizzes/               # Questionnaires et questions
+│   ├── models.py          # Questionnaire, Question, Reponse
+│   ├── serializers.py     # Sérialisation avec validation métier
+│   ├── views.py           # CRUD optimisé avec statistiques
+│   ├── filters.py         # Filtres avancés
+│   └── urls.py           # URLs questionnaires
+├── responses/             # Parcours, analyses et statistiques
+│   ├── models.py          # Parcours, ReponseUtilisateur, Analyses*
+│   ├── serializers.py     # Calculs de scores avancés
+│   ├── views.py           # Logique métier complexe
+│   └── urls.py           # URLs parcours et analytics
+└── docs/                  # Documentation complète
+    ├── API_ENDPOINTS.md   # Documentation API mise à jour
+    ├── FRONTEND.md        # Guide intégration frontend
+    └── DEPLOYMENT.md      # Guide de déploiement
+```
 
 ## 🎮 Utilisation rapide
 
-### Authentification
+### Structure API organisée
+
+L'API est maintenant organisée par domaine fonctionnel :
+
+```
+/api/
+├── auth/           # Authentification JWT complète
+├── users/          # Profil utilisateur personnel
+├── stagiaires/     # Gestion stagiaires (Admin)
+├── admins/         # Gestion admins (Admin)
+├── quizzes/        # Questionnaires & questions (Admin)
+└── parcours/       # Parcours de quiz & analyses
+```
+
+### 🔐 Endpoints d'authentification complets
+
+```
+/api/auth/
+├── login/                      # Connexion utilisateur
+├── logout/                     # Déconnexion + blacklist token
+├── token/refresh/              # Renouvellement token JWT
+├── check-auth/                 # Vérification état authentification
+├── change-password/            # Changement mot de passe (authentifié)
+├── reset-password/             # Demande réinitialisation par email
+└── reset-password-confirm/     # Confirmation réinitialisation avec token
+```
+
+### Authentification et premiers pas
+
 ```bash
-# Connexion avec l'admin créé
+# 1. Connexion admin
 curl -X POST http://localhost:8000/api/auth/login/ \
   -H "Content-Type: application/json" \
   -d '{
@@ -145,7 +234,9 @@ curl -X POST http://localhost:8000/api/auth/login/ \
     "password": "admin123"
   }'
 
-# Créer un stagiaire (nécessite token admin)
+# Response: { "refresh": "...", "access": "...", "user": {...} }
+
+# 2. Créer un stagiaire (nécessite token admin)
 curl -X POST http://localhost:8000/api/stagiaires/ \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
@@ -156,95 +247,80 @@ curl -X POST http://localhost:8000/api/stagiaires/ \
     "nom": "Dupont",
     "prenom": "Jean",
     "login": "jdupont",
-    "promotion": "2024",
-    "specialite": "Développement Web"
+    "societe": "TechCorp"
+  }'
+
+# 3. Créer un questionnaire
+curl -X POST http://localhost:8000/api/quizzes/questionnaires/ \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nom": "Quiz Python Débutant",
+    "description": "Introduction aux concepts de base",
+    "duree_minutes": 30
   }'
 ```
 
-### Structure des endpoints
-La nouvelle API est organisée par domaine fonctionnel :
+### Workflow complet de quiz
 
-#### 🔐 Authentification (`/api/auth/`)
-- `POST /api/auth/login/` - Connexion
-- `POST /api/auth/logout/` - Déconnexion
-- `POST /api/auth/token/refresh/` - Refresh token
-- `GET /api/auth/check-auth/` - Vérifier auth
-- `POST /api/auth/change-password/` - Changer mot de passe
-- `POST /api/auth/reset-password/` - Reset mot de passe
-
-#### 👤 Profil utilisateur (`/api/users/`)
-- `GET /api/users/me/` - Mon profil
-- `PUT /api/users/me/` - Modifier mon profil
-
-#### 👥 Gestion des stagiaires (`/api/stagiaires/`) - Admin uniquement
-- `GET /api/stagiaires/` - Lister stagiaires
-- `POST /api/stagiaires/` - Créer stagiaire
-- `GET /api/stagiaires/{id}/` - Détail stagiaire
-- `PUT /api/stagiaires/{id}/` - Modifier stagiaire
-- `DELETE /api/stagiaires/{id}/` - Supprimer stagiaire
-
-#### 🔑 Gestion des admins (`/api/admins/`) - Admin uniquement
-- `POST /api/admins/create/` - Créer administrateur
-
-#### 📚 Quiz (`/api/quizzes/` et `/api/responses/`)
-- Gestion des questionnaires, questions et réponses (inchangée)
-
-### Utilisation des endpoints
 ```bash
-# Accès aux questionnaires (Admin)
-curl -H "Authorization: Bearer <access_token>" \
-  http://localhost:8000/api/quizzes/questionnaires/
+# 1. Login stagiaire
+curl -X POST http://localhost:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"login": "jdupont", "password": "motdepasse123"}'
 
-# Démarrer un quiz (Stagiaire)
-curl -X POST http://localhost:8000/api/responses/parcours/ \
-  -H "Authorization: Bearer <access_token>" \
+# 2. Voir les questionnaires disponibles
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/parcours/questionnaires-disponibles/
+
+# 3. Démarrer un parcours
+curl -X POST http://localhost:8000/api/parcours/ \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"questionnaire_id": 1}'
 
-# Voir son profil
-curl -H "Authorization: Bearer <access_token>" \
-  http://localhost:8000/api/users/me/
+# 4. Obtenir la question courante
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/parcours/1/question-courante/
+
+# 5. Répondre à la question
+curl -X POST http://localhost:8000/api/parcours/1/repondre/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"reponses_ids": [1, 3], "temps_reponse_sec": 45}'
+
+# 6. Terminer le parcours
+curl -X POST http://localhost:8000/api/parcours/1/terminer/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"temps_total_sec": 1200}'
+
+# 7. Voir les résultats détaillés
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/parcours/1/resultats-detailles/
 ```
 
-## 🏗️ Architecture du projet
+## 🔧 Fonctionnalités avancées
 
-```
-quiz_platform/
-├── quiz_platform/          # Configuration Django
-│   ├── settings.py         # Settings avec config environnement
-│   ├── urls.py            # URLs principales
-│   └── wsgi.py            # Point d'entrée WSGI
-├── users/                  # Gestion utilisateurs
-│   ├── models.py          # User, Stagiaire
-│   ├── serializers.py     # Sérialisation API
-│   ├── views.py           # ViewSets et authentification
-│   └── tests/             # Tests unitaires
-├── quizzes/               # Questionnaires et questions
-│   ├── models.py          # Questionnaire, Question, Reponse
-│   ├── serializers.py     # Sérialisation avec validation
-│   ├── views.py           # CRUD complet
-│   └── tests/             # Tests unitaires
-├── responses/             # Parcours et analyses
-│   ├── models.py          # Parcours, ReponseUtilisateur, Analyses
-│   ├── serializers.py     # Calculs de scores
-│   ├── views.py           # Logique métier avancée
-│   └── tests/             # Tests unitaires et intégration
-└── docs/                  # Documentation
-    ├── API.md             # Documentation API détaillée
-    ├── FRONTEND.md        # Guide intégration Vue.js
-    └── DEPLOYMENT.md      # Guide de déploiement
-```
+### 📊 Système de notation intelligent
 
-## 🔧 Configuration avancée
+- **Choix unique** : Score binaire (1.0 ou 0.0)
+- **Choix multiples** : Score partiel calculé
+- **Formule standard** : `bonnes_selections / total_reponses_correctes`
+- **Avec pénalités** : `max(0, (bonnes - mauvaises) / total_correctes)`
 
-### Variables d'environnement complètes
-Voir le fichier `docs/ENVIRONMENT.md` pour la liste complète des variables disponibles.
+### 🎯 Analyses automatiques
 
-### Base de données PostgreSQL
-La plateforme est configurée pour utiliser PostgreSQL par défaut. Les variables d'environnement dans le fichier `.env` permettent de configurer la connexion.
+Le système calcule automatiquement :
+- **Performance par stagiaire** : Notes moyennes, temps de formation, niveau global
+- **Difficulté des questions** : Taux de réussite, temps moyen de réponse
+- **Efficacité des questionnaires** : Note médiane, taux d'abandon, questions difficiles
 
-### CORS pour frontend
-Les domaines autorisés sont configurés dans `CORS_ALLOWED_ORIGINS`. Modifiez cette variable dans `.env` pour ajouter votre domaine frontend en production.
+### 🔍 Recommandations personnalisées
+
+- Domaines à améliorer basés sur les performances
+- Suggestions de formation complémentaire
+- Analyse de l'efficacité temporelle
 
 ## 🧪 Tests
 
@@ -253,60 +329,92 @@ Les domaines autorisés sont configurés dans `CORS_ALLOWED_ORIGINS`. Modifiez c
 python manage.py test
 
 # Tests avec coverage
+pip install coverage
 coverage run --source='.' manage.py test
 coverage report
-coverage html  # Génère un rapport HTML
+coverage html  # Génère un rapport HTML dans htmlcov/
 ```
 
 ## 🚀 Déploiement
 
 Voir `docs/DEPLOYMENT.md` pour les instructions complètes de déploiement en production avec Docker et PostgreSQL.
 
-## 📈 Monitoring et logs
-
-### Logs de développement
-Les logs sont configurés pour afficher les informations importantes en console durant le développement.
-
-### Health check
-```bash
-curl http://localhost:8000/api/health/
+### Variables de production importantes
+```env
+DEBUG=False
+SECRET_KEY=votre_cle_super_securisee_en_production
+ALLOWED_HOSTS=votre-domaine.com,www.votre-domaine.com
+DB_HOST=votre-serveur-postgres
+CORS_ALLOWED_ORIGINS=https://votre-frontend.com
 ```
 
 ## 🤝 Intégration frontend
 
-### Vue.js
-Voir `docs/FRONTEND.md` pour le guide complet d'intégration avec Vue.js, incluant :
-- Configuration JWT avec Axios
-- Gestion des tokens de refresh
-- Exemples de composants
-- Gestion des erreurs
+### Vue.js / React / Angular
+Voir `docs/FRONTEND.md` pour des guides complets incluant :
+- Configuration JWT avec intercepteurs
+- Gestion automatique des refresh tokens
+- Composants d'authentification
+- Gestion d'état des quiz
+- Exemples de pages complètes
 
-## 📞 Support
+## 📈 Monitoring et maintenance
 
-- **Documentation API** : Accessible via Swagger UI
+### Health checks
+```bash
+# Vérifier l'état de l'API
+curl http://localhost:8000/api/auth/check-auth/
+
+# Recalculer les analyses (admin)
+curl -X POST http://localhost:8000/api/parcours/maintenance/recalculer-analyses/ \
+  -H "Authorization: Bearer <admin_token>"
+
+# Export des données
+curl -H "Authorization: Bearer <admin_token>" \
+  "http://localhost:8000/api/parcours/rapports/export/?format=csv"
+```
+
+## 🔄 Changements récents
+
+### ✅ Endpoints optimisés
+Les endpoints suivants ont été supprimés (redondance) :
+- ❌ `POST /api/quizzes/questionnaires/{id}/ajouter_question/`
+- ❌ `POST /api/quizzes/questionnaires/{id}/dupliquer/`
+- ❌ `POST /api/quizzes/questions/{id}/dupliquer/`
+
+### ✨ Nouvelles fonctionnalités
+- **Analyses automatiques** avec modèles dédiés
+- **Export CSV** des données de performance
+- **Recommandations IA** personnalisées
+- **API clarifiée** avec meilleure organisation
+
+## 📞 Support et ressources
+
+- **Documentation API interactive** : Swagger UI disponible localement
+- **Collection Postman** : `Quiz_Platform_Postman_Collection.json` incluse
+- **Exemples d'intégration** : Voir `docs/FRONTEND.md`
 - **Issues** : Utiliser le système d'issues du repository
-- **Email** : contact@quiz-platform.com
-
-## 📄 License
-
-MIT License - voir le fichier LICENSE pour plus de détails.
 
 ## 📄 Collection Postman
 
 Une collection Postman complète est disponible : `Quiz_Platform_Postman_Collection.json`
 
-Cette collection inclut :
-- Tous les endpoints avec exemples
-- Variables automatiques pour les tokens
-- Scripts de test pour l'extraction des données
-- Organisation par domaines fonctionnels
+### Fonctionnalités de la collection :
+- ✅ Tous les endpoints avec exemples de données
+- ✅ Variables automatiques pour les tokens JWT
+- ✅ Scripts de test pour validation des réponses
+- ✅ Organisation par domaines fonctionnels
+- ✅ Workflow complet de bout en bout
 
-### Importation
+### Import et utilisation :
 1. Ouvrir Postman
-2. Importer le fichier `Quiz_Platform_Postman_Collection.json`
-3. Configurer les variables d'environnement si nécessaire
-4. Tester les endpoints en commençant par l'authentification
+2. Importer `Quiz_Platform_Postman_Collection.json`
+3. Configurer les variables d'environnement (BASE_URL, etc.)
+4. Commencer par Login pour récupérer les tokens
+5. Tester les différents workflows selon votre rôle
 
 ---
 
 **Quiz Platform** - Plateforme de formation et d'évaluation nouvelle génération 🎯
+
+*Développée avec Django REST Framework pour une performance optimale et une évolutivité maximale.*

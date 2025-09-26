@@ -7,6 +7,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import logout
 from django.core.mail import send_mail
+import logging
+
+logger = logging.getLogger(__name__)
 from django.conf import settings
 from django.utils.crypto import get_random_string
 from django.contrib.auth.tokens import default_token_generator
@@ -22,8 +25,8 @@ from drf_spectacular.openapi import AutoSchema
 
 from .serializers import (
     LoginSerializer, LogoutSerializer, UserProfileSerializer, ChangePasswordSerializer,
-    PasswordResetSerializer, UserCreateSerializer, StagiaireCreateSerializer,
-    StagiaireUpdateSerializer, StagiaireDetailSerializer
+    PasswordResetSerializer, PasswordResetConfirmSerializer, UserCreateSerializer,
+    StagiaireCreateSerializer, StagiaireUpdateSerializer, StagiaireDetailSerializer
 )
 from .permissions import IsAdmin, IsAdminOrStagiaire
 from .filters import StagiaireFilter
@@ -157,17 +160,37 @@ class UserProfileView(APIView):
 
 class ChangePasswordView(APIView):
     """
-    Vue pour changer le mot de passe
+    Vue pour changer le mot de passe de l'utilisateur connecté
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=ChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(
+                description='Mot de passe modifié avec succès',
+                response={
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string', 'description': 'Message de confirmation'}
+                    }
+                }
+            ),
+            400: OpenApiResponse(description='Erreurs de validation'),
+            401: OpenApiResponse(description='Token d\'authentification manquant ou invalide')
+        },
+        summary='Changer mot de passe',
+        description='Permet à un utilisateur authentifié de changer son mot de passe actuel. Nécessite l\'ancien mot de passe pour validation.',
+        tags=['Authentication']
+    )
     def post(self, request):
         serializer = ChangePasswordSerializer(
             data=request.data,
             context={'request': request}
         )
         if serializer.is_valid():
-            serializer.save()
+            user = serializer.save()
+            logger.info(f'Password changed successfully for user {user.email}')
             return Response({
                 'message': 'Mot de passe modifié avec succès'
             }, status=status.HTTP_200_OK)
@@ -176,10 +199,29 @@ class ChangePasswordView(APIView):
 
 class PasswordResetView(APIView):
     """
-    Vue pour demander une réinitialisation de mot de passe
+    Vue pour demander une réinitialisation de mot de passe par email
     """
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        request=PasswordResetSerializer,
+        responses={
+            200: OpenApiResponse(
+                description='Demande de réinitialisation traitée',
+                response={
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string', 'description': 'Message de confirmation'},
+                        'reset_link': {'type': 'string', 'description': 'Lien de réinitialisation (développement uniquement)'}
+                    }
+                }
+            ),
+            400: OpenApiResponse(description='Erreurs de validation')
+        },
+        summary='Demander réinitialisation mot de passe',
+        description='Envoie un lien de réinitialisation de mot de passe à l\'adresse email fournie. Pour des raisons de sécurité, retourne toujours un succès même si l\'email n\'existe pas.',
+        tags=['Authentication']
+    )
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
         if serializer.is_valid():
@@ -191,21 +233,101 @@ class PasswordResetView(APIView):
                 token = default_token_generator.make_token(user)
                 uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-                # Envoyer l'email (à implémenter selon vos besoins)
+                # Construire le lien de réinitialisation
                 reset_link = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
 
-                # Pour le développement, on peut juste retourner le lien
-                return Response({
-                    'message': 'Email de réinitialisation envoyé',
-                    'reset_link': reset_link  # À retirer en production
-                }, status=status.HTTP_200_OK)
+                # En production, envoyer un email ici
+                if not settings.DEBUG:
+                    try:
+                        send_mail(
+                            subject='Quiz Platform - Réinitialisation de votre mot de passe',
+                            message=f'''
+Bonjour {user.prenom} {user.nom},
+
+Vous avez demandé la réinitialisation de votre mot de passe pour votre compte Quiz Platform.
+
+Cliquez sur le lien suivant pour créer un nouveau mot de passe :
+{reset_link}
+
+Ce lien expirera dans 24 heures.
+
+Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
+
+L'équipe Quiz Platform
+                            ''',
+                            from_email=settings.DEFAULT_FROM_EMAIL,
+                            recipient_list=[user.email],
+                            fail_silently=False
+                        )
+                        logger.info(f'Password reset email sent to {user.email}')
+                    except Exception as e:
+                        logger.error(f'Failed to send reset email to {user.email}: {str(e)}')
+                        # En cas d'erreur email, on continue quand même pour la sécurité
+                else:
+                    logger.info(f'DEBUG mode: Reset token generated for {user.email}')
+
+                # Pour le développement, retourner le lien directement
+                response_data = {
+                    'message': 'Email de réinitialisation envoyé avec succès'
+                }
+
+                # Inclure le lien et les paramètres individuels en mode DEBUG
+                if settings.DEBUG:
+                    response_data.update({
+                        'reset_link': reset_link,
+                        'debug_info': {
+                            'uidb64': uid,
+                            'token': token,
+                            'user_id': user.id,
+                            'email': user.email,
+                            'expires_in_hours': 24,
+                            'note': 'Ces informations sont disponibles uniquement en mode DEBUG'
+                        }
+                    })
+
+                return Response(response_data, status=status.HTTP_200_OK)
 
             except User.DoesNotExist:
-                # Ne pas révéler si l'email existe ou non
+                # Ne pas révéler si l'email existe ou non (sécurité)
                 return Response({
                     'message': 'Si cette adresse email existe, un email de réinitialisation a été envoyé'
                 }, status=status.HTTP_200_OK)
 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetConfirmView(APIView):
+    """
+    Vue pour confirmer la réinitialisation de mot de passe avec token
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @extend_schema(
+        request=PasswordResetConfirmSerializer,
+        responses={
+            200: OpenApiResponse(
+                description='Mot de passe réinitialisé avec succès',
+                response={
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string', 'description': 'Message de confirmation'}
+                    }
+                }
+            ),
+            400: OpenApiResponse(description='Token invalide ou erreurs de validation')
+        },
+        summary='Confirmer réinitialisation mot de passe',
+        description='Finalise la réinitialisation du mot de passe en utilisant le token reçu par email. Le token est valide pendant 24h.',
+        tags=['Authentication']
+    )
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            logger.info(f'Password reset completed successfully for user {user.email}')
+            return Response({
+                'message': 'Mot de passe réinitialisé avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.'
+            }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -459,3 +581,5 @@ def check_auth(request):
         'authenticated': True,
         'user': UserProfileSerializer(request.user).data
     })
+
+
