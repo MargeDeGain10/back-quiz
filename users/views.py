@@ -32,6 +32,23 @@ from .permissions import IsAdmin, IsAdminOrStagiaire
 from .filters import StagiaireFilter
 from .models import Stagiaire
 
+
+
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from rest_framework import status, permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from django.conf import settings
+
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_decode
+from rest_framework import serializers
+
+
 User = get_user_model()
 
 
@@ -198,53 +215,37 @@ class ChangePasswordView(APIView):
 
 
 class PasswordResetView(APIView):
-    """
-    Vue pour demander une réinitialisation de mot de passe par email
-    """
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
         request=PasswordResetSerializer,
         responses={
-            200: OpenApiResponse(
-                description='Demande de réinitialisation traitée',
-                response={
-                    'type': 'object',
-                    'properties': {
-                        'message': {'type': 'string', 'description': 'Message de confirmation'},
-                        'reset_link': {'type': 'string', 'description': 'Lien de réinitialisation (développement uniquement)'}
-                    }
-                }
-            ),
+            200: OpenApiResponse(description='Demande de réinitialisation traitée'),
             400: OpenApiResponse(description='Erreurs de validation')
         },
         summary='Demander réinitialisation mot de passe',
-        description='Envoie un lien de réinitialisation de mot de passe à l\'adresse email fournie. Pour des raisons de sécurité, retourne toujours un succès même si l\'email n\'existe pas.',
         tags=['Authentication']
     )
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
         if serializer.is_valid():
-            email = serializer.validated_data['email']
+            email = serializer.validated_data['email'].strip()
             try:
-                user = User.objects.get(email__iexact=email.strip())
+                user = User.objects.get(email__iexact=email)
 
-                # Générer un token de réinitialisation
+                # Génération du token et lien
                 token = default_token_generator.make_token(user)
                 uid = urlsafe_base64_encode(force_bytes(user.pk))
-
-                # Construire le lien de réinitialisation
                 reset_link = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
 
-                # En production, envoyer un email ici
-                if not settings.DEBUG:
-                    try:
-                        send_mail(
-                            subject='Quiz Platform - Réinitialisation de votre mot de passe',
-                            message=f'''
+                # Envoi du mail
+                try:
+                    send_mail(
+                        subject='Quiz Platform - Réinitialisation de votre mot de passe',
+                        message=f'''
 Bonjour {user.prenom} {user.nom},
 
-Vous avez demandé la réinitialisation de votre mot de passe pour votre compte Quiz Platform.
+Vous avez demandé la réinitialisation de votre mot de passe.
 
 Cliquez sur le lien suivant pour créer un nouveau mot de passe :
 {reset_link}
@@ -254,47 +255,31 @@ Ce lien expirera dans 24 heures.
 Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
 
 L'équipe Quiz Platform
-                            ''',
-                            from_email=settings.DEFAULT_FROM_EMAIL,
-                            recipient_list=[user.email],
-                            fail_silently=False
-                        )
-                        logger.info(f'Password reset email sent to {user.email}')
-                    except Exception as e:
-                        logger.error(f'Failed to send reset email to {user.email}: {str(e)}')
-                        # En cas d'erreur email, on continue quand même pour la sécurité
-                else:
-                    logger.info(f'DEBUG mode: Reset token generated for {user.email}')
+                        ''',
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[user.email],
+                        fail_silently=False
+                    )
+                    logger.info(f"Email de réinitialisation envoyé à {user.email}")
+                except Exception as e:
+                    logger.error(f"Erreur lors de l'envoi du mail à {user.email}: {e}")
 
-                # Pour le développement, retourner le lien directement
-                response_data = {
-                    'message': 'Email de réinitialisation envoyé avec succès'
-                }
-
-                # Inclure le lien et les paramètres individuels en mode DEBUG
+                response_data = {'message': 'Email de réinitialisation envoyé avec succès'}
                 if settings.DEBUG:
-                    response_data.update({
-                        'reset_link': reset_link,
-                        'debug_info': {
-                            'uidb64': uid,
-                            'token': token,
-                            'user_id': user.id,
-                            'email': user.email,
-                            'expires_in_hours': 24,
-                            'note': 'Ces informations sont disponibles uniquement en mode DEBUG'
-                        }
-                    })
-
+                    response_data['reset_link'] = reset_link
+                    response_data['debug_info'] = {
+                        'uidb64': uid,
+                        'token': token,
+                        'user_id': user.id,
+                    }
                 return Response(response_data, status=status.HTTP_200_OK)
 
             except User.DoesNotExist:
-                # Ne pas révéler si l'email existe ou non (sécurité)
+                # Ne jamais révéler si l'email existe
                 return Response({
-                    'message': 'Si cette adresse email existe, un email de réinitialisation a été envoyé'
+                    'message': 'Si cette adresse email existe, un email de réinitialisation a été envoyé.'
                 }, status=status.HTTP_200_OK)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class PasswordResetConfirmView(APIView):
     """
